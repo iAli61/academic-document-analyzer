@@ -1,0 +1,5 @@
+all_files
+chemRAG
+config.json
+*__pycache__*
+*.pyc
