@@ -1,0 +1,20 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+experiment_name: document_analysis_pipeline
+display_name: Document Analysis Pipeline V3
+description: Pipeline for analyzing multiple PDF documents
+
+jobs:
+  analyze_documents:
+    type: command
+    component: azureml:document_analyzer:3
+    compute: azureml:hp-gpu-cluster
+    inputs:
+      input_folder:
+        type: uri_folder
+        path: azureml:raw_papers:1
+      doc_intel_connection_id: my-doc-intelligence-connection
+      confidence_threshold: 0.7
+      min_length: 10
+      overlap_threshold: 0.5
+      ignore_roles: pageFooter,footnote

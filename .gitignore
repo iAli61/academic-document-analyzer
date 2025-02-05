@@ -3,3 +3,12 @@ chemRAG
 config.json
 *__pycache__*
 *.pyc
+.env
+*.log
+*.db
+*.sqlite3
+*.DS_Store
+*.swp
+*.swo
+*.vscode
+
