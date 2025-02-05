@@ -12,3 +12,5 @@ config.json
 *.swo
 *.vscode
 
+
+nb/output-*

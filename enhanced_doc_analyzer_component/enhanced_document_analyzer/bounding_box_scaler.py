@@ -1,4 +1,4 @@
-import fitz  # PyMuPDF
+import pymupdf   # PyMuPDF
 import pandas as pd
 from typing import Tuple, Dict, List
 from pathlib import Path
@@ -12,7 +12,7 @@ class BoundingBoxScaler:
     
     def __init__(self, pdf_path: str):
         """Initialize with PDF path to get actual page dimensions."""
-        self.pdf_doc = fitz.open(pdf_path)
+        self.pdf_doc = pymupdf .open(pdf_path)
         self.page_dimensions = {}
         self.azure_page_dimensions = {}
         

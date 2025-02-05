@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 from dataclasses import dataclass
 from typing import Dict, Any, List, Tuple
-import fitz  # PyMuPDF
+import pymupdf   # PyMuPDF
 
 class BoundingBoxVisualizer:
     """Service for visualizing and comparing bounding boxes from different sources."""
@@ -47,14 +47,14 @@ class BoundingBoxVisualizer:
         vis_dir.mkdir(parents=True, exist_ok=True)
         
         # Convert PDF pages to images
-        doc = fitz.open(pdf_path)
+        doc = pymupdf .open(pdf_path)
         visualization_paths = {}
         
         # Process each page
         for page_num in range(1, len(doc) + 1):
             # Get page image
             page = doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(zoom_factor, zoom_factor), alpha=False)
+            pix = page.get_pixmap(matrix=pymupdf .Matrix(zoom_factor, zoom_factor), alpha=False)
             img = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
             
             # Create transparent overlay
