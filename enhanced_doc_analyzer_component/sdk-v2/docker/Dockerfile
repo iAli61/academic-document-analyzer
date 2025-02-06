@@ -1,32 +1,31 @@
 # Start with the Azure ML PyTorch CUDA base image for GPU support
-FROM mcr.microsoft.com/azureml/curated/acpt-pytorch-2.2-cuda12.1:18
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV NOUGAT_CHECKPOINT=/root/.cache/huggingface/hub/models--facebook--nougat-base
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    wget \
-    curl \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libglib2.0-0 \
-    libgl1-mesa-glx \
-    poppler-utils \
-    tesseract-ocr \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update
+RUN apt-get install -y python3
+RUN apt-get -y install python3-pip git
+RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# replace CUDA version to your CUDA version.
+
+RUN mkdir workspace
+WORKDIR /workspace
+
+RUN pip3 install fastapi uvicorn[standard] fsspec[http]==2023.1.0
+RUN git clone https://github.com/facebookresearch/nougat.git
+WORKDIR /workspace/nougat
+
+RUN python3 setup.py install
 
 # Create necessary directories
-RUN mkdir -p /root/.cache/huggingface/hub/models--facebook--nougat-base/
+RUN mkdir -p /root/.cache/torch/hub/nougat-0.1.0-small
 
 # Download Nougat model files
-RUN cd /root/.cache/huggingface/hub/models--facebook--nougat-base/ && \
+RUN cd /root/.cache/torch/hub/nougat-0.1.0-small && \
     wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/config.json && \
     wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/pytorch_model.bin && \
     wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/tokenizer.json && \
@@ -37,7 +36,6 @@ RUN cd /root/.cache/huggingface/hub/models--facebook--nougat-base/ && \
 RUN pip install --no-cache-dir \
     azure-ai-formrecognizer \
     azure-identity \
-    nougat-ocr==0.1.17 \
     PyMuPDF==1.25.2 \
     transformers==4.30.0 \
     torch==2.5.1 \
