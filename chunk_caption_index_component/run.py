@@ -88,7 +88,7 @@ def main(args, logger):
         )
         
         # Run processing
-        stats = processor.process()
+        stats, _ = processor.process()
         logger.info(f"Processing completed with stats: {stats}")
         
     except Exception as e:
