@@ -415,13 +415,13 @@ class EnhancedDocumentAnalyzer:
         # Create directory for element type
         # element_dir = self.output_dir / 'elements' / element.label.lower()
         element_dir = f'elements/{element.label.lower()}'
-        element_dir.mkdir(parents=True, exist_ok=True)
+        os.makedirs(element_dir, exist_ok=True)
         
         # Crop and save image
         box = [int(c) for c in element.box]
         element_img = page_img.crop(box)
         
-        output_path = element_dir / f'page_{page_num}_{element.label}_{id(element)}.png'
+        output_path = f'{element_dir}/page_{page_num}_{element.label}_{id(element)}.png'
         element_img.save(output_path)
         
         return str(output_path)

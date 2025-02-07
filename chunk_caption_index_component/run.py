@@ -47,8 +47,6 @@ def parse_args():
     
     # Input arguments
     parser.add_argument("--input_folder", type=str, required=True)
-    parser.add_argument("--blob_connection_string", type=str, required=True)
-    parser.add_argument("--container_name", type=str, required=True)
     parser.add_argument("--azure_openai_connection_id", type=str, required=True)
     parser.add_argument("--azure_search_connection_id", type=str, required=True)
     parser.add_argument("--embd_deployment_name", type=str, required=True)
@@ -81,8 +79,6 @@ def main(args, logger):
             search_endpoint=search_endpoint,
             search_key=search_key,
             search_api_version=search_api_version,
-            blob_connection_string=args.blob_connection_string,
-            container_name=args.container_name,
             index_name=args.index_name,
             max_chunk_length=args.max_chunk_length
         )

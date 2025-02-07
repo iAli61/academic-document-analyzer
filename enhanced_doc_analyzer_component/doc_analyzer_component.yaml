@@ -1,0 +1,46 @@
+name: document_analyzer
+display_name: Document Analyzer
+description: Analyzes multiple PDF documents using Azure Document Intelligence and local processing
+
+inputs:
+  input_folder:
+    type: uri_folder
+    description: Input folder containing PDF files
+  doc_intel_connection_id:
+    type: string
+    description: Azure ML connection ID for Document Intelligence
+  confidence_threshold:
+    type: number
+    default: 0.7
+    description: Confidence threshold for element detection
+  min_length:
+    type: integer
+    default: 10
+    description: Minimum text length to consider
+  overlap_threshold:
+    type: number
+    default: 0.5
+    description: Threshold for overlap detection
+  ignore_roles:
+    type: string
+    default: pageFooter,footnote
+    description: Comma-separated list of roles to ignore
+
+outputs:
+  output_dir:
+    type: uri_folder
+    description: Folder containing visualization images organized by PDF
+
+environment: azureml:doc-analyzer-env:1
+
+code: ../
+
+command: >-
+  python run.py 
+  --input_folder ${{inputs.input_folder}} 
+  --doc_intel_connection_id ${{inputs.doc_intel_connection_id}} 
+  --confidence_threshold ${{inputs.confidence_threshold}} 
+  --min_length ${{inputs.min_length}} 
+  --overlap_threshold ${{inputs.overlap_threshold}} 
+  --ignore_roles ${{inputs.ignore_roles}} 
+  --output_dir ${{outputs.output_dir}}

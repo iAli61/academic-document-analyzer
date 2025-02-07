@@ -1,0 +1,60 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chunk_caption_index
+display_name: Chunk Caption Index
+version: 1
+type: command
+
+inputs:
+  input_folder:
+    type: uri_folder
+    description: Input folder containing document analysis results (CSV and image files)
+    
+  azure_openai_connection_id:
+    type: string
+    description: Azure ML connection ID for OpenAI service
+    
+  azure_search_connection_id:
+    type: string
+    description: Azure ML connection ID for Azure Search service
+    
+  embd_deployment_name:
+    type: string
+    description: Azure OpenAI embeddings model deployment name
+    default: text-embedding-ada-002
+    
+  vision_deployment_name:
+    type: string
+    description: Azure OpenAI GPT-4V model deployment name
+    default: gpt-4
+    
+  index_name:
+    type: string
+    description: Azure Search index name
+    
+  max_chunk_length:
+    type: integer
+    description: Maximum length of text chunks
+    default: 4000
+    optional: true
+
+outputs:
+  output_folder:
+    type: uri_folder
+    description: Output folder for processed chunks and statistics
+
+environment:
+  conda_file: ./conda.yaml
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+
+code: .
+
+command: >-
+  python run.py 
+  --input_folder ${{inputs.input_folder}} 
+  --azure_openai_connection_id ${{inputs.azure_openai_connection_id}}
+  --azure_search_connection_id ${{inputs.azure_search_connection_id}}
+  --embd_deployment_name ${{inputs.embd_deployment_name}}
+  --vision_deployment_name ${{inputs.vision_deployment_name}}
+  --index_name ${{inputs.index_name}}
+  $[[--max_chunk_length ${{inputs.max_chunk_length}}]]
+  --output_folder ${{outputs.output_folder}}
