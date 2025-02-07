@@ -40,9 +40,6 @@ RUN pip3 install --no-cache-dir \
     tqdm \
     requests
 
-RUN pip3 install -U azure-ai-ml>=1.10
-RUN pip3 install -U 'azureml-rag[azure,cognitive_search]'
-
 # Install numpy with specific version first
 RUN pip3 install numpy
 
@@ -53,6 +50,27 @@ RUN git clone https://github.com/facebookresearch/nougat.git
 WORKDIR /workspace/nougat
 
 RUN python3 setup.py install
+
+# Create necessary directories
+RUN mkdir -p /root/.cache/torch/hub/nougat-0.1.0-small
+
+# Download Nougat model files
+RUN cd /root/.cache/torch/hub/nougat-0.1.0-small && \
+    wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/config.json && \
+    wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/pytorch_model.bin && \
+    wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/tokenizer.json && \
+    wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/tokenizer_config.json && \
+    wget -q https://github.com/facebookresearch/nougat/releases/download/0.1.0-base/special_tokens_map.json
+
+
+
+# Fix Nougat transforms configuration for compatibility
+# RUN python3 -c "import nougat; import os; \
+#     transforms_file = os.path.join(os.path.dirname(nougat.__file__), 'transforms.py'); \
+#     with open(transforms_file, 'r') as f: content = f.read(); \
+#     content = content.replace('alb.ImageCompression(95, p=0.07),', \
+#                             'alb.ImageCompression(quality_lower=95, quality_upper=100, compression_type=\"jpeg\", p=0.07),'); \
+#     with open(transforms_file, 'w') as f: f.write(content)"
 
 # Set working directory
 WORKDIR /app
@@ -66,6 +84,16 @@ RUN python3 -c "import torch; print(f'PyTorch version: {torch.__version__}'); \
 
 # Verify Nougat checkpoint
 RUN python3 -c "from nougat.utils.checkpoint import get_checkpoint; print(get_checkpoint())"
+
+# test
+
+# Copy test script
+COPY . /app/
+
+RUN ls -la /app/
+
+# Run test script as final step
+RUN python3 /app/nb/test.py
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \

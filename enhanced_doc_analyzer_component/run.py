@@ -26,9 +26,8 @@ def parse_args():
     parser.add_argument("--ignore_roles", type=str, default="pageFooter,footnote")
     
     # Output arguments
-    parser.add_argument("--markdown_output_folder", type=str, required=True)
     parser.add_argument("--combined_elements_data", type=str, required=True)
-    parser.add_argument("--visualizations_folder", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
     
     return parser.parse_args()
 
@@ -60,8 +59,7 @@ def setup_document_intelligence(connection_id: str) -> tuple:
         logger.error(f"Failed to setup Document Intelligence connection: {str(e)}")
         raise
 
-def process_single_pdf(pdf_path: Path, analyzer: EnhancedDocumentAnalyzer, 
-                      markdown_dir: Path, vis_dir: Path, logger) -> pd.DataFrame:
+def process_single_pdf(pdf_path: Path, analyzer: EnhancedDocumentAnalyzer, logger) -> pd.DataFrame:
     """
     Process a single PDF file and return its elements DataFrame.
     
@@ -80,23 +78,15 @@ def process_single_pdf(pdf_path: Path, analyzer: EnhancedDocumentAnalyzer,
         markdown_text, elements_df, visualizations = analyzer.analyze_document(str(pdf_path))
         
         # Save markdown output
-        markdown_file = markdown_dir / f"{pdf_path.stem}_analysis.md"
+        markdown_file = f"{analyzer.output_dir}/{pdf_path.stem}_analysis.md"
         with open(markdown_file, "w", encoding="utf-8") as f:
             f.write(markdown_text)
         
-        # Create PDF-specific visualization directory
-        pdf_vis_dir = vis_dir / pdf_path.stem
-        pdf_vis_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Copy visualizations
-        import shutil
-        for page_num, vis_path in visualizations.items():
-            src_path = Path(vis_path)
-            dst_path = pdf_vis_dir / src_path.name
-            shutil.copy2(src_path, dst_path)
-        
         # Add filename column to DataFrame
         elements_df['source_pdf'] = pdf_path.name
+
+        # Save results
+        elements_df.to_csv(f"{analyzer.output_dir}/{pdf_path.stem}_elements.csv", index=False)
         
         logger.info(f"Successfully processed {pdf_path.name}")
         logger.info(f"Elements detected: {len(elements_df)}")
@@ -118,29 +108,10 @@ def main(args, logger):
         logger: Logger instance
     """
     try:
-        # Create output directories
-        output_dir = Path("output")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        markdown_dir = Path(args.markdown_output_folder)
-        markdown_dir.mkdir(parents=True, exist_ok=True)
-        
-        vis_dir = Path(args.visualizations_folder)
-        vis_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Set up Document Intelligence credentials
         endpoint, api_key = setup_document_intelligence(args.doc_intel_connection_id)
         
-        # Initialize analyzer
-        analyzer = EnhancedDocumentAnalyzer(
-            api_key=api_key,
-            endpoint=endpoint,
-            output_dir=str(output_dir),
-            confidence_threshold=args.confidence_threshold,
-            min_length=args.min_length,
-            overlap_threshold=args.overlap_threshold,
-            ignor_roles=args.ignore_roles.split(",")
-        )
         
         # Get list of PDF files
         input_folder = Path(args.input_folder)
@@ -155,15 +126,28 @@ def main(args, logger):
         # Process each PDF and collect DataFrames
         all_dfs = []
         for pdf_file in pdf_files:
+
+            output_dir = Path(args.output_dir) / pdf_file.stem
+            output_dir.mkdir(parents=True, exist_ok=True)
+            # Initialize analyzer
+            analyzer = EnhancedDocumentAnalyzer(
+                api_key=api_key,
+                endpoint=endpoint,
+                output_dir=str(output_dir),
+                confidence_threshold=args.confidence_threshold,
+                min_length=args.min_length,
+                overlap_threshold=args.overlap_threshold,
+                ignor_roles=args.ignore_roles.split(",")
+            )
             logger.info(f"Processing {pdf_file.name}")
-            df = process_single_pdf(pdf_file, analyzer, markdown_dir, vis_dir, logger)
+            df = process_single_pdf(pdf_file, analyzer, logger)
             if not df.empty:
                 all_dfs.append(df)
         
         # Combine all DataFrames
         if all_dfs:
             combined_df = pd.concat(all_dfs, ignore_index=True)
-            combined_df.to_csv(args.combined_elements_data, index=False)
+            combined_df.to_csv(f"{args.combined_elements_data}", index=False)
             logger.info(f"Combined data saved to {args.combined_elements_data}")
             logger.info(f"Total elements across all PDFs: {len(combined_df)}")
         else:
