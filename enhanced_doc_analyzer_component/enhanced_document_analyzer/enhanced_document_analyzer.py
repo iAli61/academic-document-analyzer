@@ -413,7 +413,8 @@ class EnhancedDocumentAnalyzer:
                           page_num: int) -> str:
         """Save an element as an image and return the path."""
         # Create directory for element type
-        element_dir = self.output_dir / 'elements' / element.label.lower()
+        # element_dir = self.output_dir / 'elements' / element.label.lower()
+        element_dir = f'elements/{element.label.lower()}'
         element_dir.mkdir(parents=True, exist_ok=True)
         
         # Crop and save image

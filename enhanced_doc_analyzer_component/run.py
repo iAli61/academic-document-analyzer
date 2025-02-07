@@ -26,7 +26,6 @@ def parse_args():
     parser.add_argument("--ignore_roles", type=str, default="pageFooter,footnote")
     
     # Output arguments
-    parser.add_argument("--combined_elements_data", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     
     return parser.parse_args()
@@ -140,15 +139,19 @@ def main(args, logger):
                 ignor_roles=args.ignore_roles.split(",")
             )
             logger.info(f"Processing {pdf_file.name}")
-            df = process_single_pdf(pdf_file, analyzer, logger)
-            if not df.empty:
-                all_dfs.append(df)
+            try:
+                pdf = process_single_pdf(pdf_file, analyzer, logger)
+                if not pdf.empty:
+                    all_dfs.append(pdf)
+            except Exception as e:
+                logger.error(f"Error processing {pdf_file.name}: {str(e)}")
+                logger.error(traceback.format_exc())
         
         # Combine all DataFrames
         if all_dfs:
             combined_df = pd.concat(all_dfs, ignore_index=True)
-            combined_df.to_csv(f"{args.combined_elements_data}", index=False)
-            logger.info(f"Combined data saved to {args.combined_elements_data}")
+            combined_df.to_csv(f"{args.output_dir}.combined_elements_data.csv", index=False)
+            logger.info(f"Combined data saved to {args.output_dir}.combined_elements_data.csv")
             logger.info(f"Total elements across all PDFs: {len(combined_df)}")
         else:
             logger.warning("No data was successfully processed")
