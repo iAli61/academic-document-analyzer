@@ -14,33 +14,49 @@ logger = get_logger("document_analyzer")
 
 def setup_openai_client(connection_id: str) -> tuple:
     """Set up Azure OpenAI client using connection."""
-    connection = get_connection_by_id_v2(connection_id)
-    endpoint = connection['properties']['target']
-    api_key = connection['properties']['credentials']['keys']['key']
-    
-    # Create clients for vision and embeddings
-    vision_client = AzureOpenAI(
-        api_key=api_key,
-        api_version="2023-03-15-preview",
-        azure_endpoint=endpoint
-    )
-    
-    embedding_client = AzureOpenAI(
-        api_key=api_key,
-        api_version="2024-02-01",
-        azure_endpoint=endpoint
-    )
-    
-    return vision_client, embedding_client
+    try:
+        # Get connection details
+        connection = get_connection_by_id_v2(connection_id)
+        
+        # Access properties using object methods/attributes
+        endpoint = connection.endpoint
+        api_key = connection.api_key
+        
+        # Create clients for vision and embeddings
+        vision_client = AzureOpenAI(
+            api_key=api_key,
+            api_version="2023-03-15-preview",
+            azure_endpoint=endpoint
+        )
+        
+        embedding_client = AzureOpenAI(
+            api_key=api_key,
+            api_version="2024-02-01",
+            azure_endpoint=endpoint
+        )
+        
+        return vision_client, embedding_client
+        
+    except Exception as e:
+        logger.error(f"Failed to setup Azure OpenAI connection: {str(e)}")
+        raise
 
 def setup_search_connection(connection_id: str) -> tuple:
     """Set up Azure Search connection details."""
-    connection = get_connection_by_id_v2(connection_id)
-    endpoint = connection['properties']['target']
-    api_key = connection['properties']['credentials']['keys']['api_key']
-    api_version = connection['properties'].get('metadata', {}).get('apiVersion', "2023-07-01-preview")
-    
-    return endpoint, api_key, api_version
+    try:
+        # Get connection details
+        connection = get_connection_by_id_v2(connection_id)
+        
+        # Access properties using object methods/attributes
+        endpoint = connection.endpoint
+        api_key = connection.api_key
+        api_version = getattr(connection.metadata, 'apiVersion', "2024-05-01-preview")
+        
+        return endpoint, api_key, api_version
+        
+    except Exception as e:
+        logger.error(f"Failed to setup Azure Search connection: {str(e)}")
+        raise
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -94,15 +110,11 @@ def main(args, logger):
 
 def main_wrapper(args):
     """Wrapper function to handle logging and MLflow run context."""
-    with track_activity(logger, "document_analyzer") as activity_logger, \
-         safe_mlflow_start_run(logger=logger):
-        try:
-            main(args, activity_logger)
-        except Exception:
-            activity_logger.error(
-                f"document_analyzer failed with exception: {traceback.format_exc()}"
-            )
-            raise
+    try:
+        main(args, logger)
+    except Exception:
+        logger.error(f"document_analyzer failed with exception: {traceback.format_exc()}")
+        raise
 
 if __name__ == "__main__":
     args = parse_args()

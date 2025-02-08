@@ -388,23 +388,48 @@ class DocumentProcessor:
             # Create search index
             self.create_search_index()
             
+            # Find CSV files in input folder
+            csv_files = list(self.input_folder.glob("*.csv"))
+            if not csv_files:
+                logger.error(f"No CSV files found in input folder: {self.input_folder}")
+                return ({
+                    "error": "No input CSV files found",
+                    "timestamp": datetime.now().isoformat()
+                }, pd.DataFrame())
+            
             # Read input CSV
-            input_csv = list(self.input_folder.glob("*.csv"))[0]
+            input_csv = csv_files[0]
+            logger.info(f"Processing CSV file: {input_csv}")
             df = pd.read_csv(input_csv)
+            
+            if df.empty:
+                logger.error("Input CSV file is empty")
+                return ({
+                    "error": "Empty input CSV file",
+                    "timestamp": datetime.now().isoformat()
+                }, pd.DataFrame())
             
             # Initialize lists for chunk data
             chunk_data = []
             documents = []
-            stats = {"processed": 0, "errors": 0, "chunks": 0}
+            stats = {
+                "processed": 0,
+                "errors": 0,
+                "chunks": 0,
+                "input_file": str(input_csv),
+                "total_rows": len(df)
+            }
             
-            for _, row in df.iterrows():
+            for idx, row in df.iterrows():
                 try:
                     # Handle text chunks
                     chunks = self.chunk_text(row['text'])
                     
                     # If no text, generate caption for image
                     if not chunks and pd.notna(row['image_path']):
-                        caption = self.generate_caption(row['image_path'])
+                        image_path = self.input_folder / row['image_path']
+                        print(image_path)
+                        caption = self.generate_caption(image_path)
                         chunks = [caption] if caption else []
                     
                     for chunk in chunks:
@@ -448,36 +473,65 @@ class DocumentProcessor:
                     
                     stats["processed"] += 1
                     
+                    # Log progress periodically
+                    if idx > 0 and idx % 100 == 0:
+                        logger.info(f"Processed {idx}/{len(df)} rows ({idx/len(df)*100:.1f}%)")
+                    
                 except Exception as e:
-                    logger.error(f"Error processing row: {str(e)}")
+                    logger.error(f"Error processing row {idx}: {str(e)}")
                     stats["errors"] += 1
                     continue
                 
                 # Upload in batches of 1000
                 if len(documents) >= 1000:
-                    self.search_client.upload_documents(documents=documents)
-                    documents = []
+                    try:
+                        self.search_client.upload_documents(documents=documents)
+                        logger.info(f"Uploaded batch of {len(documents)} documents")
+                        documents = []
+                    except Exception as e:
+                        logger.error(f"Error uploading document batch: {str(e)}")
+                        stats["errors"] += 1
             
             # Upload remaining documents
             if documents:
-                self.search_client.upload_documents(documents=documents)
+                try:
+                    self.search_client.upload_documents(documents=documents)
+                    logger.info(f"Uploaded final batch of {len(documents)} documents")
+                except Exception as e:
+                    logger.error(f"Error uploading final document batch: {str(e)}")
+                    stats["errors"] += 1
             
             # Create DataFrame from processed chunks
             chunks_df = pd.DataFrame(chunk_data)
             
             # Save processing stats
             stats["timestamp"] = datetime.now().isoformat()
+            stats["completion_status"] = "success"
+            
+            # Create output directory if it doesn't exist
             self.output_folder.mkdir(parents=True, exist_ok=True)
             
             # Save stats and DataFrame
-            with open(self.output_folder / "processing_stats.json", "w") as f:
-                json.dump(stats, f, indent=2)
-                
-            chunks_df.to_csv(self.output_folder / "processed_chunks.csv", index=False)
+            stats_file = self.output_folder / "processing_stats.json"
+            chunks_file = self.output_folder / "processed_chunks.csv"
             
-            logger.info(f"Processing completed. Stats: {stats}")
-            return (stats, chunks_df)  # Explicitly return as tuple
+            with open(stats_file, "w") as f:
+                json.dump(stats, f, indent=2)
+            
+            chunks_df.to_csv(chunks_file, index=False)
+            
+            logger.info(f"Processing completed. Stats saved to: {stats_file}")
+            logger.info(f"Processed chunks saved to: {chunks_file}")
+            logger.info(f"Final stats: {stats}")
+            
+            return (stats, chunks_df)
             
         except Exception as e:
-            logger.error(f"Error in document processing: {str(e)}")
-            return ({}, pd.DataFrame())  # Return empty results on error
+            error_stats = {
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+                "completion_status": "failed"
+            }
+            logger.error(f"Critical error in document processing: {str(e)}")
+            return (error_stats, pd.DataFrame())
+

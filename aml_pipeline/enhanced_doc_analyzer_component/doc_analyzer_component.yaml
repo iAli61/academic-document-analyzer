@@ -31,9 +31,9 @@ outputs:
     type: uri_folder
     description: Folder containing visualization images organized by PDF
 
-environment: azureml:doc-analyzer-env:1
+environment: azureml:doc-analyzer-env:10
 
-code: ../
+code: .
 
 command: >-
   python run.py 

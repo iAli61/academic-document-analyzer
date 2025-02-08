@@ -150,7 +150,7 @@ def main(args, logger):
         # Combine all DataFrames
         if all_dfs:
             combined_df = pd.concat(all_dfs, ignore_index=True)
-            combined_df.to_csv(f"{args.output_dir}.combined_elements_data.csv", index=False)
+            combined_df.to_csv(f"{args.output_dir}/combined_elements_data.csv", index=False)
             logger.info(f"Combined data saved to {args.output_dir}.combined_elements_data.csv")
             logger.info(f"Total elements across all PDFs: {len(combined_df)}")
         else:
