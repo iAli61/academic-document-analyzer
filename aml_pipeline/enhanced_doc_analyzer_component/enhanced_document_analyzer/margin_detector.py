@@ -86,23 +86,56 @@ class MarginDetector:
         self.min_column_gap = min_column_gap
         self.peak_prominence = peak_prominence
     
-    def _detect_columns(self, 
-                       edges: Dict[str, np.ndarray], 
-                       dimensions: PageDimensions) -> ColumnLayout:
+    def _detect_columns(self, edges: Dict[str, np.ndarray], dimensions: PageDimensions) -> ColumnLayout:
         """
         Detect document columns using density-based analysis of x-coordinates.
+        
+        Args:
+            edges: Dictionary containing arrays of edge positions
+            dimensions: Page dimensions information
+            
+        Returns:
+            ColumnLayout: Detected column layout information
         """
         # Create density histogram of x-coordinates
         x_positions = np.concatenate([edges['left'], edges['right']])
-        hist, bin_edges = np.histogram(x_positions, bins=self.density_bins, 
-                                     range=(0, dimensions.width_pixels))
+        
+        # Filter out any invalid values
+        x_positions = x_positions[np.isfinite(x_positions)]
+        
+        if len(x_positions) == 0:
+            print("Warning: No valid x-coordinates found for column detection")
+            return ColumnLayout(
+                num_columns=1,
+                column_positions=[(0, dimensions.width_pixels)]
+            )
+        
+        # Use actual data range instead of assuming [0, width]
+        x_min = max(0, np.min(x_positions))
+        x_max = min(dimensions.width_pixels, np.max(x_positions))
+        
+        if not np.isfinite(x_min) or not np.isfinite(x_max):
+            print("Warning: Invalid coordinate range detected")
+            return ColumnLayout(
+                num_columns=1,
+                column_positions=[(0, dimensions.width_pixels)]
+            )
+        
+        # Create histogram with validated range
+        hist, bin_edges = np.histogram(
+            x_positions, 
+            bins=self.density_bins,
+            range=(x_min, x_max)
+        )
         
         # Smooth histogram for better peak detection
         smoothed_hist = np.convolve(hist, np.ones(5)/5, mode='same')
         
         # Find valleys (low density regions = potential column gaps)
-        valleys, _ = find_peaks(-smoothed_hist, 
-                              prominence=self.peak_prominence * np.max(smoothed_hist))
+        valleys, _ = find_peaks(
+            -smoothed_hist,
+            prominence=self.peak_prominence * np.max(smoothed_hist)
+        )
         
         if len(valleys) == 0:
             # Single column document
@@ -134,6 +167,7 @@ class MarginDetector:
             column_positions=column_positions
         )
     
+
     def detect_margins(self, df: pd.DataFrame) -> Tuple[Dict[int, MarginSizes], ColumnLayout]:
         """
         Detect consistent margin sizes and column layout across all pages.
