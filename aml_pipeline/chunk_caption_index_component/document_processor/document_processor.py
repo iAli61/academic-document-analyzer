@@ -427,8 +427,8 @@ class DocumentProcessor:
                     
                     # If no text, generate caption for image
                     if not chunks and pd.notna(row['image_path']):
-                        image_path = self.input_folder / row['image_path']
-                        print(image_path)
+                        # image_path = self.input_folder / row['image_path']
+                        image_path = row['image_path']
                         caption = self.generate_caption(image_path)
                         chunks = [caption] if caption else []
                     
