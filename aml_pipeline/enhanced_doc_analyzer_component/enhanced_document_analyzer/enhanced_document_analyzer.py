@@ -426,7 +426,7 @@ class EnhancedDocumentAnalyzer:
         output_path = element_dir / f'page_{page_num}_{element.label}_{id(element)}.png'
         element_img.save(output_path)
         
-        return str(output_path)
+        return str(output_path).split('output_dir/')[-1]
 
     def _pdf_to_images(self, pdf_path: Path) -> List[Image.Image]:
         """
