@@ -110,6 +110,47 @@ class EnhancedDocumentAnalyzer:
         min_area = min(area1, area2)
         
         return intersection / min_area if min_area > 0 else 0.0
+    
+    def _get_azure_page_info(azure_result: dict, page_num: int) -> dict:
+        """
+        Safely get page information from Azure results with error handling.
+        
+        Args:
+            azure_result: Azure Document Intelligence results
+            page_num: Page number to find
+            
+        Returns:
+            dict: Page information or default values
+        """
+        try:
+            # First try exact match
+            for page in azure_result.get('pages', []):
+                if page.get('page_number') == page_num:
+                    return page
+                    
+            # If not found, try finding closest match
+            available_pages = sorted([p.get('page_number') for p in azure_result.get('pages', []) 
+                                if p.get('page_number') is not None])
+            if not available_pages:
+                raise ValueError(f"No valid pages found in Azure results")
+                
+            closest_page_num = min(available_pages, key=lambda x: abs(x - page_num))
+            print(f"Warning: Page {page_num} not found, using closest match: {closest_page_num}")
+            
+            return next(p for p in azure_result['pages'] 
+                    if p.get('page_number') == closest_page_num)
+                    
+        except Exception as e:
+            print(f"Error getting page info for page {page_num}: {str(e)}")
+            # Return default values as fallback
+            return {
+                'page_number': page_num,
+                'width': 8.5,  # Standard letter size in inches
+                'height': 11,
+                'unit': 'inch',
+                'tables': [],
+                'paragraphs': []
+            }
 
     def analyze_document(self, pdf_path: str) -> Tuple[str, pd.DataFrame, Dict[int, str]]:
         """
@@ -145,41 +186,49 @@ class EnhancedDocumentAnalyzer:
             # Step 3: Process each page
             print("\nStep 3: Page Processing")
             for page_num, page_img in enumerate(images, 1):
-                print(f"\nProcessing page {page_num}/{len(images)}")
-                
-                # 3a. Detect layout elements
-                layout_elements = self.layout_detector.detect_elements(page_img, page_num)
-                print(f"Detected {len(layout_elements)} layout elements")
-                
-                # 3b. Save visualization of layout detection
-                vis_path = self.layout_detector.save_page_with_boxes(
-                    page_img, layout_elements, self.output_dir, page_num
-                )
-                print(f"Saved layout visualization to: {vis_path}")
-                
-                # 3c. Process Azure text paragraphs
-                azure_page_info = next(p for p in azure_result['pages'] if p['page_number'] == page_num)
-                azure_elements = process_azure_paragraphs(
-                    azure_result['paragraphs'],
-                    pdf_path.name,
-                    azure_page_info,
-                    page_num,
-                    self.ignor_roles,
-                    self.min_length
-                )
-                print(f"Processed {len(azure_elements)} Azure text elements")
-                elements.extend(azure_elements)
-                
-                # 3d. Process layout elements with Nougat
-                layout_records = self._process_layout_elements(
-                    layout_elements,
-                    page_img,
-                    pdf_path.name,
-                    page_num
-                )
-                print(f"Processed {len(layout_records)} layout elements")
-                elements.extend(layout_records)
+                try:
+                    print(f"\nProcessing page {page_num}/{len(images)}")
+                    
+                    # Get Azure page info with error handling
+                    azure_page_info = self._get_azure_page_info(azure_result, page_num)
+                    
+                    # 3a. Detect layout elements
+                    layout_elements = self.layout_detector.detect_elements(page_img, page_num)
+                    print(f"Detected {len(layout_elements)} layout elements")
+                    
+                    # 3b. Save visualization of layout detection
+                    vis_path = self.layout_detector.save_page_with_boxes(
+                        page_img, layout_elements, self.output_dir, page_num
+                    )
+                    print(f"Saved layout visualization to: {vis_path}")
+                    
+                    # 3c. Process Azure text paragraphs
+                    azure_elements = process_azure_paragraphs(
+                        azure_result.get('paragraphs', []),
+                        pdf_path.name,
+                        azure_page_info,
+                        page_num,
+                        self.ignor_roles,
+                        self.min_length
+                    )
+                    print(f"Processed {len(azure_elements)} Azure text elements")
+                    elements.extend(azure_elements)
+                    
+                    # 3d. Process layout elements with Nougat
+                    layout_records = self._process_layout_elements(
+                        layout_elements,
+                        page_img,
+                        pdf_path.name,
+                        page_num
+                    )
+                    print(f"Processed {len(layout_records)} layout elements")
+                    elements.extend(layout_records)
+                    
+                except Exception as e:
+                    print(f"Error processing page {page_num}: {str(e)}")
+                    continue  # Continue with next page
             
+            # Rest of the processing remains the same...
             # Step 4: Create and process DataFrame
             print("\nStep 4: Element Processing")
             df = self._create_dataframe(elements)
