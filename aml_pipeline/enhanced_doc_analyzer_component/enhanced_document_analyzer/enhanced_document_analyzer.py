@@ -379,7 +379,7 @@ class EnhancedDocumentAnalyzer:
                 bounding_box=BoundingBox.from_layout_box(page_num, elem.box),
                 element_type=elem_type,
                 text=extracted_text if extracted_text else elem.text,
-                image_path=img_path,
+                image_path='output_dir/' + str(img_path).split('output_dir/')[-1],
                 confidence=elem.confidence,
                 metadata={
                     'extraction_method': extraction_method,
@@ -476,7 +476,7 @@ class EnhancedDocumentAnalyzer:
         output_path = element_dir / f'page_{page_num}_{element.label}_{id(element)}.png'
         element_img.save(output_path)
         
-        return 'output_dir/' + str(output_path).split('output_dir/')[-1]
+        return str(output_path)
 
     def _pdf_to_images(self, pdf_path: Path) -> List[Image.Image]:
         """
