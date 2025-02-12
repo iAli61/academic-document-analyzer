@@ -15,7 +15,7 @@ from .nougat_service import NougatService
 from .document_types import DocumentElement
 from .bounding_box_visualizer import BoundingBoxVisualizer
 from .bounding_box_scaler import BoundingBoxScaler
-from .azure_utils import analyze_with_azure, process_azure_paragraphs
+from .azure_utils import analyze_page_with_azure, process_azure_paragraphs
 from .overlap_utils import filter_overlapping_elements
 from .margin_detector import MarginDetector
 
@@ -153,6 +153,8 @@ class EnhancedDocumentAnalyzer:
                 'paragraphs': []
             }
         
+    # enhanced_document_analyzer.py
+
     def analyze_document(self, pdf_path: str) -> Tuple[str, pd.DataFrame, Dict[int, str]]:
         """
         Analyze a PDF document using multiple processing stages.
@@ -174,36 +176,44 @@ class EnhancedDocumentAnalyzer:
             # Initialize bounding box scaler
             bbox_scaler = BoundingBoxScaler(str(pdf_path))
             
-            # Step 1: Process with Azure Document Intelligence
-            print("\nStep 1: Azure Document Analysis")
-            azure_result = analyze_with_azure(self.azure_client, pdf_path, self.output_dir)
-            bbox_scaler.set_azure_dimensions(azure_result)
-            
-            # Step 2: Convert PDF pages to images
-            print("\nStep 2: PDF to Image Conversion")
+            # Step 1: Convert PDF pages to images first to know total pages
+            print("\nStep 1: PDF to Image Conversion")
             images = self._pdf_to_images(pdf_path)
-            print(f"Converted {len(images)} pages to images")
+            print(f"Converting {len(images)} pages to images")
             
-            # Step 3: Process each page
-            print("\nStep 3: Page Processing")
+            # Step 2: Process each page
+            print("\nStep 2: Page Processing")
             for page_num, page_img in enumerate(images, 1):
                 try:
                     print(f"\nProcessing page {page_num}/{len(images)}")
                     
+                    # 2a. Process with Azure Document Intelligence
+                    print(f"Running Azure Document Analysis for page {page_num}")
+                    azure_result = analyze_page_with_azure(
+                        self.azure_client, 
+                        pdf_path, 
+                        page_num, 
+                        self.output_dir
+                    )
+                    
+                    # Update bounding box scaler with page dimensions
+                    if page_num == 1:  # Only need to set dimensions once as they should be consistent
+                        bbox_scaler.set_azure_dimensions(azure_result)
+                    
                     # Get Azure page info with error handling
                     azure_page_info = self._get_azure_page_info(azure_result, page_num)
                     
-                    # 3a. Detect layout elements
+                    # 2b. Detect layout elements
                     layout_elements = self.layout_detector.detect_elements(page_img, page_num)
                     print(f"Detected {len(layout_elements)} layout elements")
                     
-                    # 3b. Save visualization of layout detection
+                    # 2c. Save visualization of layout detection
                     vis_path = self.layout_detector.save_page_with_boxes(
                         page_img, layout_elements, self.output_dir, page_num
                     )
                     print(f"Saved layout visualization to: {vis_path}")
                     
-                    # 3c. Process Azure text paragraphs
+                    # 2d. Process Azure text paragraphs
                     azure_elements = process_azure_paragraphs(
                         azure_result.get('paragraphs', []),
                         pdf_path.name,
@@ -215,7 +225,7 @@ class EnhancedDocumentAnalyzer:
                     print(f"Processed {len(azure_elements)} Azure text elements")
                     elements.extend(azure_elements)
                     
-                    # 3d. Process layout elements with Nougat
+                    # 2e. Process layout elements with Nougat
                     layout_records = self._process_layout_elements(
                         layout_elements,
                         page_img,
@@ -229,27 +239,26 @@ class EnhancedDocumentAnalyzer:
                     print(f"Error processing page {page_num}: {str(e)}")
                     continue  # Continue with next page
             
-            # Rest of the processing remains the same...
-            # Step 4: Create and process DataFrame
-            print("\nStep 4: Element Processing")
+            # Step 3: Create and process DataFrame
+            print("\nStep 3: Element Processing")
             df = self._create_dataframe(elements)
             print(f"Initial DataFrame rows: {len(df)}")
             
-            # 4a. Normalize bounding boxes
+            # 3a. Normalize bounding boxes
             print("Normalizing bounding boxes...")
             df = bbox_scaler.normalize_bounding_boxes(df)
             
-            # 4b. Filter overlapping elements
+            # 3b. Filter overlapping elements
             print("Filtering overlapping elements...")
             df = filter_overlapping_elements(df, self.overlap_threshold)
             print(f"Rows after overlap filtering: {len(df)}")
             
-            # 4c. Filter margin elements
+            # 3c. Filter margin elements
             print("Filtering margin elements...")
             margin_detector = MarginDetector(
-                density_bins=500,  # number of bins for density analysis
-                min_column_gap=50,  # minimum gap between columns in pixels
-                peak_prominence=0.9  # sensitivity of column detection
+                density_bins=500,
+                min_column_gap=50,
+                peak_prominence=0.9
             )
 
             # Get margins and column layout
@@ -259,14 +268,14 @@ class EnhancedDocumentAnalyzer:
             df = margin_detector.filter_margin_elements(df, margin_sizes, column_layout)
             print(f"Rows after margin filtering: {len(df)}")
             
-            # Step 5: Generate outputs
-            print("\nStep 5: Generating Outputs")
+            # Step 4: Generate outputs
+            print("\nStep 4: Generating Outputs")
             
-            # 5a. Create markdown
+            # 4a. Create markdown
             print("Generating markdown...")
             markdown_text = self._create_markdown_from_df(df)
             
-            # 5b. Create visualizations
+            # 4b. Create visualizations
             print("Creating visualizations...")
             visualizer = BoundingBoxVisualizer()
             visualization_paths = visualizer.create_overlay_visualization(
