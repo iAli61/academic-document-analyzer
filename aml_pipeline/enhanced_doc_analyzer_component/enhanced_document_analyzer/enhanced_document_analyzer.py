@@ -111,11 +111,12 @@ class EnhancedDocumentAnalyzer:
         
         return intersection / min_area if min_area > 0 else 0.0
     
-    def _get_azure_page_info(azure_result: dict, page_num: int) -> dict:
+    def _get_azure_page_info(self, azure_result: dict, page_num: int) -> dict:
         """
         Safely get page information from Azure results with error handling.
         
         Args:
+            self: Instance of EnhancedDocumentAnalyzer
             azure_result: Azure Document Intelligence results
             page_num: Page number to find
             
@@ -151,7 +152,7 @@ class EnhancedDocumentAnalyzer:
                 'tables': [],
                 'paragraphs': []
             }
-
+        
     def analyze_document(self, pdf_path: str) -> Tuple[str, pd.DataFrame, Dict[int, str]]:
         """
         Analyze a PDF document using multiple processing stages.
