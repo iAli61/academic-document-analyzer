@@ -32,7 +32,9 @@ class DocumentProcessor:
         self.vision_deployment_name = vision_deployment_name
         self.max_chunk_length = max_chunk_length
         self.max_image_size = max_image_size
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
+        
+        # Initialize text splitter with fallback method
+        self._initialize_text_splitter()
 
     def validate_image(self, image_path: str) -> bool:
         """Validate if the image is suitable for processing."""
@@ -183,26 +185,74 @@ class DocumentProcessor:
             "lines": len(text.splitlines())
         }
 
-    def chunk_text(self, text: str) -> List[str]:
-        """Split text into smaller chunks."""
+    def _initialize_text_splitter(self):
+        """Initialize text splitting functionality with fallback options."""
+        try:
+            import tiktoken
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")
+            self.split_text = self._split_text_tiktoken
+        except Exception as e:
+            logger.warning(f"Failed to initialize tiktoken: {str(e)}")
+            logger.info("Falling back to basic text splitting")
+            self.split_text = self._split_text_basic
+
+    def _split_text_tiktoken(self, text: str) -> List[str]:
+        """Split text using tiktoken tokenizer."""
         if pd.isna(text) or len(text) <= self.max_chunk_length:
             return [text] if pd.notna(text) else []
 
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        chunks, current_chunk = [], ""
+        tokens = self.tokenizer.encode(text)
+        chunks = []
+        current_chunk = []
+        current_length = 0
 
-        for sentence in sentences:
-            if len(current_chunk) + len(sentence) + 1 <= self.max_chunk_length:
-                current_chunk += " " + sentence if current_chunk else sentence
-            else:
+        for token in tokens:
+            token_text = self.tokenizer.decode([token])
+            token_length = len(token_text)
+            
+            if current_length + token_length > self.max_chunk_length:
                 if current_chunk:
-                    chunks.append(current_chunk)
-                current_chunk = sentence
+                    chunks.append(self.tokenizer.decode(current_chunk))
+                current_chunk = [token]
+                current_length = token_length
+            else:
+                current_chunk.append(token)
+                current_length += token_length
 
         if current_chunk:
-            chunks.append(current_chunk)
+            chunks.append(self.tokenizer.decode(current_chunk))
 
         return chunks
+
+    def _split_text_basic(self, text: str) -> List[str]:
+        """Fallback method for text splitting using basic string operations."""
+        if pd.isna(text) or len(text) <= self.max_chunk_length:
+            return [text] if pd.notna(text) else []
+
+        # Split on sentence boundaries
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for sentence in sentences:
+            if current_length + len(sentence) + 1 > self.max_chunk_length:
+                if current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_length = len(sentence)
+            else:
+                current_chunk.append(sentence)
+                current_length += len(sentence) + 1  # +1 for space
+
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        return chunks
+
+    def chunk_text(self, text: str) -> List[str]:
+        """Public method for text chunking that uses the initialized splitter."""
+        return self.split_text(text)
 
     def process(self) -> Tuple[Dict, str]:
         """Process documents and return stats and output file path."""
