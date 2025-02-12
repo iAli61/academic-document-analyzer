@@ -201,7 +201,10 @@ class EnhancedDocumentAnalyzer:
                         bbox_scaler.set_azure_dimensions(azure_result)
                     
                     # Get Azure page info with error handling
-                    azure_page_info = self._get_azure_page_info(azure_result, page_num)
+                    azure_page_info = self._get_azure_page_info(
+                        azure_result=azure_result, 
+                        page_num=1, #because we are using only one page
+                        )
                     
                     # 2b. Detect layout elements
                     layout_elements = self.layout_detector.detect_elements(page_img, page_num)
@@ -215,12 +218,12 @@ class EnhancedDocumentAnalyzer:
                     
                     # 2d. Process Azure text paragraphs
                     azure_elements = process_azure_paragraphs(
-                        azure_result.get('paragraphs', []),
-                        pdf_path.name,
-                        azure_page_info,
-                        page_num,
-                        self.ignor_roles,
-                        self.min_length
+                        paragraphs = azure_result.get('paragraphs', []),
+                        pdf_name = pdf_path.name,
+                        page_info = azure_page_info,
+                        page_num = page_num,
+                        ignor_roles = self.ignor_roles,
+                        min_length = self.min_length
                     )
                     print(f"Processed {len(azure_elements)} Azure text elements")
                     elements.extend(azure_elements)
