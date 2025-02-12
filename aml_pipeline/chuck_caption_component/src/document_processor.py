@@ -27,7 +27,9 @@ class DocumentProcessor:
         max_image_size: int = 20971520  # 20MB limit for GPT-4V
     ):
         self.input_folder = Path(input_folder)
+        logger.info(f"Input folder: {self.input_folder}")
         self.output_folder = Path(output_folder)
+        logger.info(f"Output folder: {self.output_folder}")
         self.vision_client = openai_client
         self.vision_deployment_name = vision_deployment_name
         self.max_chunk_length = max_chunk_length
@@ -41,6 +43,7 @@ class DocumentProcessor:
         try:
             if not os.path.exists(image_path):
                 logger.warning(f"Image file does not exist: {image_path}")
+                
                 return False
 
             # Check file size
