@@ -191,12 +191,14 @@ class DocumentProcessor:
                         messages=[
                             {
                                 "role": "system",
-                                "content": "You are an AI that generates descriptive captions for images."
+                                "content": "You are an AI specialized in generating precise, technical captions for academic and scientific images. Focus on quantitative details, scientific notation, chemical formulas, experimental conditions, and technical specifications when present. For graphs and plots, describe key trends, axes, and significant data points. For experimental setups, include relevant equipment and configurations. Maintain scientific accuracy and use field-specific terminology appropriately."
                             },
                             {
                                 "role": "user",
                                 "content": [
-                                    {"type": "text", "text": "Describe this image in one sentence."},
+                                    {"type": "text", 
+                                     "text": "Generate a detailed, comprehensive caption for this academic image. Include: 1) The type of visualization (e.g., graph, experimental setup, chemical structure, microscopy image, etc.), 2) Key quantitative information or trends if present, 3) Important experimental conditions or parameters if shown, 4) Any chemical formulas, reactions, or mathematical equations if present. Focus on precision and completeness while maintaining conciseness."
+                                    },
                                     {
                                         "type": "image_url",
                                         "image_url": {
