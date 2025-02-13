@@ -29,7 +29,7 @@ outputs:
     type: uri_folder
     description: Output folder for processed chunks and statistics
 
-environment: azureml:chunk-caption-env:1
+environment: azureml:chunk-caption-env:2
 
 code: .
 
