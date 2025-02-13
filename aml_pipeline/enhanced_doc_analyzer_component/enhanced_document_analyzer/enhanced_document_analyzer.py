@@ -393,7 +393,7 @@ class EnhancedDocumentAnalyzer:
                 bounding_box=BoundingBox.from_layout_box(page_num, elem.box),
                 element_type=elem_type,
                 text=extracted_text if extracted_text else elem.text,
-                image_path='output_dir/' + str(img_path).split('output_dir/')[-1],
+                image_path=str(img_path).split('output_dir/')[-1],
                 confidence=elem.confidence,
                 metadata={
                     'extraction_method': extraction_method,
