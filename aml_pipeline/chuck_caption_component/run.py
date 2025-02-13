@@ -5,6 +5,7 @@ import traceback
 from openai import AzureOpenAI
 from azureml.rag.utils.connections import get_connection_by_id_v2
 from azureml.rag.utils.logging import get_logger, safe_mlflow_start_run, track_activity
+import os
 
 from src import DocumentProcessor
 
@@ -52,6 +53,12 @@ def main(args, logger):
         vision_client = setup_openai_client(args.azure_openai_connection_id)
 
         logger.info(f"input_folder: {args.input_folder}")
+        # print the list of files in the input folder
+        
+        for root, dirs, files in os.walk(args.input_folder):
+            for file in files:
+                logger.info(f"file: {file}")
+                print(f"file: {file}")
         logger.info(f"output_folder: {args.output_folder}")
         
         # Initialize document processor
