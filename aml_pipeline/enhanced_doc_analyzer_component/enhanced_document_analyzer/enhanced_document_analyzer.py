@@ -197,8 +197,7 @@ class EnhancedDocumentAnalyzer:
                     )
                     
                     # Update bounding box scaler with page dimensions
-                    if page_num == 1:  # Only need to set dimensions once as they should be consistent
-                        bbox_scaler.set_azure_dimensions(azure_result)
+                    bbox_scaler.set_azure_dimensions(azure_result, page_num)
                     
                     # Get Azure page info with error handling
                     azure_page_info = self._get_azure_page_info(

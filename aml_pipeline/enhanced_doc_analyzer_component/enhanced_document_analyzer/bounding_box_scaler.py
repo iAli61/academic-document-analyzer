@@ -24,19 +24,35 @@ class BoundingBoxScaler:
             }
         print(f"PDF page dimensions: {self.page_dimensions}")
     
-    def set_azure_dimensions(self, azure_result: Dict):
+    def set_azure_dimensions(self, azure_result: Dict, page_num: int = None):
         """Store Azure-reported page dimensions."""
-        for page in azure_result['pages']:
-            page_num = page['page_number']
-            unit = page['unit'].lower()
-            
+        if page_num is None:
+            for page in azure_result['pages']:
+                page_num = page['page_number']
+                unit = page['unit'].lower()
+                
+                if unit != 'inch':
+                    raise ValueError(f"Unexpected unit from Azure: {unit}. Expected 'inch'")
+                    
+                # Store original dimensions and convert to points
+                width_inches = float(page['width'])
+                height_inches = float(page['height'])
+                
+                self.azure_page_dimensions[page_num] = {
+                    'width_inches': width_inches,
+                    'height_inches': height_inches,
+                    'width_points': width_inches * self.POINTS_PER_INCH,
+                    'height_points': height_inches * self.POINTS_PER_INCH
+                }
+        else:
+            unit = azure_result['unit'].lower()
             if unit != 'inch':
                 raise ValueError(f"Unexpected unit from Azure: {unit}. Expected 'inch'")
-                
-            # Store original dimensions and convert to points
-            width_inches = float(page['width'])
-            height_inches = float(page['height'])
             
+            # Store original dimensions and convert to points
+            width_inches = float(azure_result['width'])
+            height_inches = float(azure_result['height'])
+
             self.azure_page_dimensions[page_num] = {
                 'width_inches': width_inches,
                 'height_inches': height_inches,
@@ -68,6 +84,8 @@ class BoundingBoxScaler:
         Returns:
             Coordinates in PDF points
         """
+        print(f"\nNormalizing Azure box on page {page}:")
+        print(f"azure_page_dimensions: {self.azure_page_dimensions}")
         if page not in self.azure_page_dimensions:
             raise ValueError(f"Azure dimensions not set for page {page}")
             
