@@ -31,41 +31,9 @@ from azure.search.documents.indexes.models import (
 )
 
 from openai import AzureOpenAI
-
-logger = logging.getLogger(__name__)
-
-import base64
-import json
-import logging
-import pandas as pd
-import re
-import uuid
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional
-from PIL import Image
 import io
 import os
 
-from azure.core.credentials import AzureKeyCredential
-from azure.search.documents import SearchClient
-from azure.search.documents.indexes import SearchIndexClient
-from azure.search.documents.indexes.models import (
-    SearchIndex,
-    SimpleField,
-    SearchableField,
-    SearchField,
-    SearchFieldDataType,
-    VectorSearch,
-    HnswAlgorithmConfiguration,
-    VectorSearchProfile,
-    SemanticField,
-    SemanticConfiguration,
-    SemanticPrioritizedFields,
-    SemanticSearch,
-)
-
-from openai import AzureOpenAI
 
 logger = logging.getLogger(__name__)
 

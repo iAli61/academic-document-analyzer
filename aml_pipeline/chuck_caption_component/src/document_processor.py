@@ -12,9 +12,54 @@ from PIL import Image
 import io
 import os
 import base64
+from tiktoken.core import Encoding
 from openai import AzureOpenAI
 
 logger = logging.getLogger(__name__)
+
+def load_custom_tiktoken(tiktoken_path):
+    """
+    Load a custom tiktoken vocabulary file with base64 encoded format
+    
+    Args:
+        tiktoken_path: Path to your .tiktoken file
+    Returns:
+        CustomEncoding object
+    """
+    # Load the .tiktoken file and parse base64 entries
+    vocab = {}
+    with open(tiktoken_path, 'r') as f:
+        for line in f:
+            if line.strip():  # Skip empty lines
+                token_base64, rank_str = line.strip().split()
+                # Decode base64 to bytes
+                token_bytes = base64.b64decode(token_base64)
+                rank = int(rank_str)
+                vocab[token_bytes] = rank
+
+    # Use the same pattern as cl100k_base
+    pat_str = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]??[^\r\n\p{L}\p{N}]'|\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
+    # pat_str=r"[a-zA-Z0-9]+|[^a-zA-Z0-9\s]+"
+    
+    # Create the custom encoding
+    encoding = Encoding(
+        name="cl100k_custom",
+        pat_str=pat_str,
+        mergeable_ranks=vocab,
+        special_tokens={}  # Add any special tokens if needed
+    )
+    
+    return encoding
+
+encoding = load_custom_tiktoken("./tiktoken_files/cl100k_base.tiktoken")
+
+# Test the encoding
+test_text = "Hello world!"
+tokens = encoding.encode(test_text)
+decoded = encoding.decode(tokens)
+
+print(f"Encoded tokens: {tokens}")
+print(f"Decoded text: {decoded}")
 
 class DocumentProcessor:
     def __init__(
@@ -190,14 +235,22 @@ class DocumentProcessor:
 
     def _initialize_text_splitter(self):
         """Initialize text splitting functionality with fallback options."""
+
         try:
-            import tiktoken
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
+            logger.info("Successfully initialized tiktoken tokenizer")
             self.split_text = self._split_text_tiktoken
+        # if it fails, load custom tiktoken
         except Exception as e:
-            logger.warning(f"Failed to initialize tiktoken: {str(e)}")
+            self.tokenizer = load_custom_tiktoken("./tiktoken_files/cl100k_base.tiktoken")
+            logger.info("Successfully initialized custom tiktoken tokenizer")
+            self.split_text = self._split_text_tiktoken
+        
+        if not self.tokenizer:
+            logger.warning("Failed to initialize tiktoken tokenizer")
             logger.info("Falling back to basic text splitting")
             self.split_text = self._split_text_basic
+
 
     def _split_text_tiktoken(self, text: str) -> List[str]:
         """Split text using tiktoken tokenizer."""
