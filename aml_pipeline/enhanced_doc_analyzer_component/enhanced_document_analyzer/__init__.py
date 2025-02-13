@@ -4,7 +4,6 @@ from .document_types import (
     DocumentMetadata,
     DocumentResult
 )
-from .document_analyzer import DocumentAnalyzer
 from .layout_detection_service import LayoutDetectionService
 from .nougat_service import NougatService
 from .markdown_service import MarkdownService
@@ -14,7 +13,6 @@ from .enhanced_document_analyzer import EnhancedDocumentAnalyzer
 from .document_element_record import DocumentElementRecord, BoundingBox
 
 __all__ = [
-    'DocumentAnalyzer',
     'LayoutDetectionService',
     'NougatService',
     'MarkdownService',
