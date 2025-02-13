@@ -51,7 +51,7 @@ def load_custom_tiktoken(tiktoken_path):
     
     return encoding
 
-encoding = load_custom_tiktoken("./tiktoken_files/cl100k_base.tiktoken")
+encoding = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
 
 # Test the encoding
 test_text = "Hello world!"
@@ -242,7 +242,7 @@ class DocumentProcessor:
             self.split_text = self._split_text_tiktoken
         # if it fails, load custom tiktoken
         except Exception as e:
-            self.tokenizer = load_custom_tiktoken("./tiktoken_files/cl100k_base.tiktoken")
+            self.tokenizer = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
             logger.info("Successfully initialized custom tiktoken tokenizer")
             self.split_text = self._split_text_tiktoken
         
