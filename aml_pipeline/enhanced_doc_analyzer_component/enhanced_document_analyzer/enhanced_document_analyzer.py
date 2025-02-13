@@ -206,7 +206,7 @@ class EnhancedDocumentAnalyzer:
                         page_num=1, #because we are using only one page
                         )
                     
-                    print(f"Azure page info: {azure_page_info}")
+                    # print(f"Azure page info: {azure_page_info}")
                     
                     # 2b. Detect layout elements
                     layout_elements = self.layout_detector.detect_elements(page_img, page_num)

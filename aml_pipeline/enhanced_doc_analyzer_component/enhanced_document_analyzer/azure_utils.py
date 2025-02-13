@@ -74,10 +74,10 @@ def process_azure_paragraphs(paragraphs: List[Dict], pdf_name: str, page_info: D
     # Add order_id to track original Azure ordering
     for order_id, para in enumerate(paragraphs):
         if para['role'] in ignor_roles:
-            print(f"Skipping ignored role: {para['role']}")
+            # print(f"Skipping ignored role: {para['role']}")
             continue
         if len(para['content']) < min_length:
-            print(f"Skipping short paragraph: {para['content']}")
+            # print(f"Skipping short paragraph: {para['content']}")
             continue
             
         if para['bounding_regions'][0]['page_number'] == page_info['page_number']:
