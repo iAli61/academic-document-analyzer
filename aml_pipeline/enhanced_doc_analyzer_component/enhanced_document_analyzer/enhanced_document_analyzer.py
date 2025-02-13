@@ -502,13 +502,13 @@ class EnhancedDocumentAnalyzer:
         Returns:
             List of page images
         """
-        doc = pymupdf .open(pdf_path)
+        doc = pymupdf.open(pdf_path)
         images = []
         
         for page in doc:
             # Use a higher DPI for better text recognition (300 DPI)
             zoom = 3.0  # 72 dpi * 3 = 216 dpi
-            matrix = pymupdf .Matrix(zoom, zoom)
+            matrix = pymupdf.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=matrix, alpha=False)
             
             # Convert to PIL Image in RGB mode

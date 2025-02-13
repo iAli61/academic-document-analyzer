@@ -12,7 +12,7 @@ class BoundingBoxScaler:
     
     def __init__(self, pdf_path: str):
         """Initialize with PDF path to get actual page dimensions."""
-        self.pdf_doc = pymupdf .open(pdf_path)
+        self.pdf_doc = pymupdf.open(pdf_path)
         self.page_dimensions = {}
         self.azure_page_dimensions = {}
         
@@ -82,8 +82,6 @@ class BoundingBoxScaler:
         # print(f"Converted to points: ({x1_pts:.2f}, {y1_pts:.2f}, {x2_pts:.2f}, {y2_pts:.2f})")
         
         return (x1_pts, y1_pts, x2_pts, y2_pts)
-        
-        return (x1, y1, x2, y2)
     
     def normalize_layout_box(self, page: int, box: Tuple[float, float, float, float], zoom_factor: float = 3.0) -> Tuple[float, float, float, float]:
         """
