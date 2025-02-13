@@ -29,9 +29,7 @@ outputs:
     type: uri_folder
     description: Output folder for processed chunks and statistics
 
-environment:
-  conda_file: ./conda.yaml
-  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+environment: azureml:chunk-caption-env:1
 
 code: .
 

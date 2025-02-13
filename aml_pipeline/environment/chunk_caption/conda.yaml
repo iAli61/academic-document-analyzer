@@ -19,3 +19,5 @@ dependencies:
     - mlflow
     - numpy
     - uuid
+    - tokenizers
+    - tiktoken

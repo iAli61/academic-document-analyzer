@@ -50,6 +50,9 @@ def main(args, logger):
     try:
         # Set up Azure OpenAI client
         vision_client = setup_openai_client(args.azure_openai_connection_id)
+
+        logger.info(f"input_folder: {args.input_folder}")
+        logger.info(f"output_folder: {args.output_folder}")
         
         # Initialize document processor
         processor = DocumentProcessor(
