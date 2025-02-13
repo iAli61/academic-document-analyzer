@@ -37,6 +37,7 @@ RUN pip3 install --no-cache-dir \
     matplotlib \
     seaborn \
     python-dotenv \
+    pytesseract \
     tqdm \
     requests
 

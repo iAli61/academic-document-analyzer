@@ -431,15 +431,19 @@ class EnhancedDocumentAnalyzer:
                         break
             
             if not extracted_text:
-                # If Nougat extraction failed, try OCR fallback for tables
+                # If Nougat extraction failed, try Azure Document Intelligence fallback for tables
                 if elem_type == DocumentElementType.TABLE:
                     try:
-                        import pytesseract
-                        from PIL import Image
-                        element_img = Image.open(img_path).convert('RGB')
-                        extracted_text = pytesseract.image_to_string(element_img)
+                        # Use Azure Document Intelligence for OCR fallback
+                        azure_result = analyze_page_with_azure(
+                            self.azure_client, 
+                            img_path, 
+                            page_num, 
+                            self.output_dir
+                        )
+                        extracted_text = azure_result["content"]
                     except Exception as e:
-                        print(f"OCR fallback failed for table on page {page_num}: {str(e)}")
+                        print(f"Azure OCR fallback failed for table on page {page_num}: {str(e)}")
                 else:
                     print(f"Warning: No text extracted from {elem.label} on page {page_num}")
         except Exception as e:

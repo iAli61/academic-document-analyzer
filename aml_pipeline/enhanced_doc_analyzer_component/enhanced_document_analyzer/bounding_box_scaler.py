@@ -22,6 +22,7 @@ class BoundingBoxScaler:
                 'width': page.rect.width,  # in points
                 'height': page.rect.height  # in points
             }
+        print(f"PDF page dimensions: {self.page_dimensions}")
     
     def set_azure_dimensions(self, azure_result: Dict):
         """Store Azure-reported page dimensions."""
