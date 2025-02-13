@@ -46,8 +46,8 @@ class BoundingBoxScaler:
                 }
         else:
             unit = azure_result['unit'].lower()
-            if unit != 'inch':
-                raise ValueError(f"Unexpected unit from Azure: {unit}. Expected 'inch'")
+            # if unit != 'inch':
+            #     raise ValueError(f"Unexpected unit from Azure: {unit}. Expected 'inch'")
             
             # Store original dimensions and convert to points
             width_inches = float(azure_result['width'])
@@ -59,6 +59,8 @@ class BoundingBoxScaler:
                 'width_points': width_inches * self.POINTS_PER_INCH,
                 'height_points': height_inches * self.POINTS_PER_INCH
             }
+
+            print(f"Azure page dimensions: {self.azure_page_dimensions[page_num]} for page {page_num}")
             
             # Debug logging for dimension comparison
             # pdf_width = self.page_dimensions[page_num]['width']
