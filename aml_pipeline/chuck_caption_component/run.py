@@ -59,8 +59,10 @@ def main(args, logger):
         for root, dirs, files in os.walk(args.input_folder):
             for file in files:
                 logger.info(f"file: {os.path.join(root, file)}")
+                print(f"file: {os.path.join(root, file)}")
             for dir in dirs:
                 logger.info(f"dir: {os.path.join(root, dir)}")
+                print(f"dir: {os.path.join(root, dir)}")
 
         logger.info(f"output_folder: {args.output_folder}")
         
