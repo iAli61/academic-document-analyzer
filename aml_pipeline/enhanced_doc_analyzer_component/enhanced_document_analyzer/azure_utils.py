@@ -80,7 +80,7 @@ def process_azure_paragraphs(paragraphs: List[Dict], pdf_name: str, page_info: D
             print(f"Skipping short paragraph: {para['content']}")
             continue
             
-        if para['bounding_regions'][0]['page_number'] == page_num:
+        if para['bounding_regions'][0]['page_number'] == page_info['page_number']:
             elements.append(DocumentElementRecord(
                 pdf_file=pdf_name,
                 page=page_num,
@@ -97,5 +97,8 @@ def process_azure_paragraphs(paragraphs: List[Dict], pdf_name: str, page_info: D
                     'azure_order_id': order_id
                 }
             ))
+        else:
+            print(f"Skipping paragraph from different page: {para['content']}")
+            print(f"because it is on page {para['bounding_regions'][0]['page_number']} instead of {page_info['page_number']}")
     
     return elements
