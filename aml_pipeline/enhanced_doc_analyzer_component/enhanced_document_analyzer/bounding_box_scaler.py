@@ -45,13 +45,14 @@ class BoundingBoxScaler:
                     'height_points': height_inches * self.POINTS_PER_INCH
                 }
         else:
-            unit = azure_result['unit'].lower()
-            # if unit != 'inch':
-            #     raise ValueError(f"Unexpected unit from Azure: {unit}. Expected 'inch'")
+            page = azure_result['pages'][0]
+            unit = page['unit'].lower()
+            if unit != 'inch':
+                raise ValueError(f"Unexpected unit from Azure: {unit}. Expected 'inch'")
             
             # Store original dimensions and convert to points
-            width_inches = float(azure_result['width'])
-            height_inches = float(azure_result['height'])
+            width_inches = float(page['width'])
+            height_inches = float(page['height'])
 
             self.azure_page_dimensions[page_num] = {
                 'width_inches': width_inches,
