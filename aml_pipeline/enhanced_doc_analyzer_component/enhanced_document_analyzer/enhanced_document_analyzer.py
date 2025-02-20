@@ -28,7 +28,10 @@ class EnhancedDocumentAnalyzer:
                  confidence_threshold: float = 0.7,
                  min_length: int = 10,
                  overlap_threshold: float = 0.5,
-                 ignor_roles: List[str] = ['pageFooter','footnote']):
+                 ignor_roles: List[str] = ['pageFooter','footnote'],
+                 top_margin_percent: float = 0.0,  # as a percentage of page height
+                 bottom_margin_percent: float = 0.0
+                 ):
         """Initialize the document analyzer with both Azure and local services."""
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -45,6 +48,10 @@ class EnhancedDocumentAnalyzer:
         self.min_length = min_length
         self.ignor_roles = ignor_roles
         self.overlap_threshold = overlap_threshold
+        self.top_margin_percent = top_margin_percent
+        self.bottom_margin_percent = bottom_margin_percent
+        self.top_margin = 0
+        self.bottom_margin = 0
 
     def _calculate_overlap(self, smaller_box: Tuple[float, float, float, float], 
                          larger_box: Tuple[float, float, float, float]) -> float:
@@ -180,6 +187,13 @@ class EnhancedDocumentAnalyzer:
             print("\nStep 1: PDF to Image Conversion")
             images = self._pdf_to_images(pdf_path)
             print(f"Converting {len(images)} pages to images")
+
+            # Calculate margin in pixels based on the first page's height
+            if images:
+                page_height = images[0].height
+                self.top_margin = int(self.top_margin_percent * page_height)
+                self.bottom_margin = int(self.bottom_margin_percent * page_height)
+                print(f"Top Margin: {self.top_margin}, Bottom Margin: {self.bottom_margin}")
             
             # Step 2: Process each page
             print("\nStep 2: Page Processing")
@@ -377,7 +391,7 @@ class EnhancedDocumentAnalyzer:
                 continue
                 
             # Save element image
-            img_path = self._save_element_image(page_img, elem, page_num)
+            img_path = self._save_element_image(page_img, elem, page_num, self.top_margin, self.bottom_margin)
             
             # Extract text using appropriate method
             if extraction_method == 'nougat' and elem_type != DocumentElementType.IMAGE:
@@ -475,18 +489,52 @@ class EnhancedDocumentAnalyzer:
         return closest_type
 
     def _save_element_image(self, 
-                          page_img: Image.Image, 
-                          element: DocumentElement,
-                          page_num: int) -> str:
-        """Save an element as an image and return the path."""
+                            page_img: Image.Image, 
+                            element: DocumentElement,
+                            page_num: int,
+                            top_margin: int = 0,
+                            bottom_margin: int = 0
+                          ) -> str:
+        """
+        Save an element as an image and return the path.
+
+        The `top_margin` and `bottom_margin` parameters specify the number of pixels to 
+        expand the bounding box of the detected element before cropping the image. These margins are used to 
+        include surrounding context in the cropped image. The unit is pixels.
+
+        Typical pixel dimensions for a standard document page (8.5 x 11 inches) at 300 DPI are approximately 2550 x 3300 pixels.
+        The exact number of pixels will vary depending on the DPI and the dimensions of the page.
+
+        Args:
+            page_img (Image.Image): The PIL Image object representing the page.
+            element (DocumentElement): The document element to save as an image.
+            page_num (int): The page number of the element.
+            top_margin (int, optional): The margin in pixels to add to the top of the bounding box. Defaults to 0.
+            bottom_margin (int, optional): The margin in pixels to add to the bottom of the bounding box. Defaults to 0.
+
+        Returns:
+            str: The path to the saved image.
+        """
         # Create directory for element type
         element_dir = self.output_dir / 'elements' / element.label.lower()
         # element_dir = f'elements/{element.label.lower()}'
         # os.makedirs(element_dir, exist_ok=True)
         element_dir.mkdir(parents=True, exist_ok=True)
         
-        # Crop and save image
-        box = [int(c) for c in element.box]
+        # Calculate the boundaries of the image
+        width, height = page_img.size
+        
+        # Crop and save image with margins
+        # Ensure the box coordinates are within the image boundaries
+        top = max(0, element.box[1] - top_margin)
+        bottom = min(height, element.box[3] + bottom_margin)
+        box = (
+            element.box[0],
+            top,
+            element.box[2],
+            bottom
+        )
+        
         element_img = page_img.crop(box)
         
         # output_path = f'{element_dir}/page_{page_num}_{element.label}_{id(element)}.png'

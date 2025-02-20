@@ -39,7 +39,7 @@ class NougatService:
         """
         try:
             # Load and process image
-            image = Image.open(image_path)
+            # image = Image.open(image_path)
             
             # Create dataset with single image
             dataset = ImageDataset(

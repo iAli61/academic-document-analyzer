@@ -163,9 +163,12 @@ class LayoutDetectionService:
             return []
 
     def save_elements_as_images(self, 
-                              image: Image.Image, 
-                              elements: List[DocumentElement], 
-                              output_dir: Path) -> List[DocumentElement]:
+                                image: Image.Image, 
+                                elements: List[DocumentElement], 
+                                output_dir: Path,
+                                top_margin: int = 0,
+                                bottom_margin: int = 0
+                              ) -> List[DocumentElement]:
         """
         Save individual elements as separate images.
         
@@ -196,8 +199,8 @@ class LayoutDetectionService:
                     print(f"Warning: Invalid box coordinates for {element.label}: {box}")
                     continue
                 
-                # Crop and save element
-                element_image = image.crop((x1, y1, x2, y2))
+                # Crop and save element + margins
+                element_image = image.crop((x1, y1 - top_margin, x2, y2 + bottom_margin))
                 element_path = elements_dir / f'page_{element.page}_{element.label}_{idx}.png'
                 element_image.save(element_path)
                 element.path = str(element_path)
