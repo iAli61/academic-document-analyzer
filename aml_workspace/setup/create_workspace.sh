@@ -72,8 +72,8 @@ if [ -z "$WORKSPACE_EXISTS" ]; then
         --name "$WORKSPACE_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --location "$LOCATION" \
-        # --managed-network allow_internet_outbound \
-        # --set public_network_access=Enabled \
+        --managed-network allow_internet_outbound \
+        --set public_network_access=Enabled 
         # --storage-account "$STORAGE_ID"
 else
     echo "Azure ML workspace already exists: $WORKSPACE_NAME"
