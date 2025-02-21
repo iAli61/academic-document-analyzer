@@ -317,7 +317,7 @@ class DocumentProcessor:
         try:
             csv_files = list(self.input_folder.glob("*.csv"))
             if not csv_files:
-                logger.error(f"No CSV files found in input folder: {self.input_folder}")
+                logger.error(f"No CSV files found in input folder: {self.output_folder}")
                 return ({
                     "error": "No input CSV files found",
                     "timestamp": datetime.now().isoformat()
@@ -376,13 +376,13 @@ class DocumentProcessor:
                                         "id": str(uuid.uuid4())
                                     }
                                 },
-                                "document_id": row['pdf_file']
+                                "document_id": str(uuid.uuid4())
                             }
                             
                             f.write(json.dumps(chunk_record) + '\n')
-                            stats["chunks"] += 1
                         
                         stats["processed"] += 1
+                        stats["chunks"] += 1
                         
                         if idx > 0 and idx % 100 == 0:
                             logger.info(f"Processed {idx}/{len(df)} rows ({idx/len(df)*100:.1f}%)")

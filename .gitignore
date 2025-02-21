@@ -18,3 +18,4 @@ nb/files
 nb/data
 nb/faiss_mlindex_with_langchain-1.ipynb
 aml_workspace/config/dev.local.json
+files

@@ -72,7 +72,8 @@ if [ -z "$WORKSPACE_EXISTS" ]; then
         --name "$WORKSPACE_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --location "$LOCATION" \
-        --managed-network allow_internet_outbound 
+        # --managed-network allow_internet_outbound \
+        # --set public_network_access=Enabled \
         # --storage-account "$STORAGE_ID"
 else
     echo "Azure ML workspace already exists: $WORKSPACE_NAME"
@@ -100,10 +101,6 @@ echo "Assigning roles to managed identity..."
 az role assignment create --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Storage Blob Data Reader" --scope "$STORAGE_ACCOUNT_ID"
 az role assignment create --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" --scope "$STORAGE_ACCOUNT_ID"
 
-# Assign Contributor role to the managed identity for the Azure ML workspace
-WORKSPACE_ID=$(az ml workspace show --subscription "$SUBSCRIPTION_ID" --resource-group "$RESOURCE_GROUP" --name "$WORKSPACE_NAME" --query 'id' -o tsv)
-az role assignment create --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Contributor" --scope "$WORKSPACE_ID"
-
 # Create compute clusters
 echo "Creating compute clusters..."
 
@@ -113,7 +110,6 @@ CPU_VM_SIZE=$(jq -r .compute.cpu_cluster.vm_size "$CONFIG_FILE")
 CPU_MIN_INSTANCES=$(jq -r .compute.cpu_cluster.min_instances "$CONFIG_FILE")
 CPU_MAX_INSTANCES=$(jq -r .compute.cpu_cluster.max_instances "$CONFIG_FILE")
 CPU_IDLE_TIME=$(jq -r .compute.cpu_cluster.idle_time_before_scale_down "$CONFIG_FILE")
-CPU_LOW_PRIORITY=$(jq -r .compute.cpu_cluster.low_priority "$CONFIG_FILE")
 
 # Create CPU compute YAML configuration
 cat << EOF > cpu_compute.yml
@@ -129,11 +125,6 @@ identity:
     - resource_id: $IDENTITY_ID
 EOF
 
-if [ "$CPU_LOW_PRIORITY" == "true" ]; then
-    sed -i '/type: amlcompute/a \
-tier: low_priority' cpu_compute.yml
-fi
-
 # Create CPU compute cluster
 az ml compute create \
     --resource-group "$RESOURCE_GROUP" \
@@ -146,7 +137,6 @@ GPU_VM_SIZE=$(jq -r .compute.gpu_cluster.vm_size "$CONFIG_FILE")
 GPU_MIN_INSTANCES=$(jq -r .compute.gpu_cluster.min_instances "$CONFIG_FILE")
 GPU_MAX_INSTANCES=$(jq -r .compute.gpu_cluster.max_instances "$CONFIG_FILE")
 GPU_IDLE_TIME=$(jq -r .compute.gpu_cluster.idle_time_before_scale_down "$CONFIG_FILE")
-GPU_LOW_PRIORITY=$(jq -r .compute.gpu_cluster.low_priority "$CONFIG_FILE")
 
 # Create GPU compute YAML configuration
 cat << EOF > gpu_compute.yml
@@ -162,30 +152,11 @@ identity:
     - resource_id: $IDENTITY_ID
 EOF
 
-if [ "$GPU_LOW_PRIORITY" == "true" ]; then
-    sed -i '/type: amlcompute/a \
-tier: low_priority' gpu_compute.yml
-fi
-
 # Create GPU compute cluster
 az ml compute create \
     --resource-group "$RESOURCE_GROUP" \
     --workspace-name "$WORKSPACE_NAME" \
     --file gpu_compute.yml
-
-# Parse the “compute_instances” array and create each compute instance.
-COMPUTE_INSTANCES=$(jq -c '.compute.compute_instances[]?' "$CONFIG_FILE")
-for ci in $COMPUTE_INSTANCES; do
-    CI_NAME=$(echo "$ci" | jq -r '.name')
-    CI_VM_SIZE=$(echo "$ci" | jq -r '.vm_size')
-    echo "Creating compute instance $CI_NAME..."
-    az ml compute create \
-        --name "$CI_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --workspace-name "$WORKSPACE_NAME" \
-        --type computeinstance \
-        --size "$CI_VM_SIZE"
-done
 
 # Clean up temporary YAML files
 rm cpu_compute.yml gpu_compute.yml
