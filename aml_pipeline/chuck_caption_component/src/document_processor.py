@@ -368,6 +368,7 @@ class DocumentProcessor:
                                         "url": row.get('url', ''),
                                         "mtime": os.path.getmtime(self.input_folder / row['pdf_file']) if os.path.exists(self.input_folder / row['pdf_file']) else None,
                                         "role": row['role'],
+                                        "type": row['type'],
                                         "image_path": row['image_path'],
                                         "confidence": row['confidence'],
                                         "source": row['source'],
