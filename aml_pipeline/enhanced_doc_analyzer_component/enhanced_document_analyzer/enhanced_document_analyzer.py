@@ -7,6 +7,7 @@ import os
 import numpy as np
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .document_element_type import DocumentElementType
 from .document_element_record import DocumentElementRecord, BoundingBox
@@ -160,21 +161,8 @@ class EnhancedDocumentAnalyzer:
                 'paragraphs': []
             }
         
-    # enhanced_document_analyzer.py
-
     def analyze_document(self, pdf_path: str) -> Tuple[str, pd.DataFrame, Dict[int, str]]:
-        """
-        Analyze a PDF document using multiple processing stages.
-        
-        Args:
-            pdf_path: Path to the PDF file to analyze
-            
-        Returns:
-            Tuple containing:
-            - Markdown text representation of the document
-            - DataFrame with element information
-            - Dictionary mapping page numbers to visualization paths
-        """
+        """Parallelized document analysis using ThreadPoolExecutor."""
         pdf_path = Path(pdf_path)
         elements = []
         print(f"\nProcessing document: {pdf_path}")
@@ -183,79 +171,45 @@ class EnhancedDocumentAnalyzer:
             # Initialize bounding box scaler
             bbox_scaler = BoundingBoxScaler(str(pdf_path))
             
-            # Step 1: Convert PDF pages to images first to know total pages
+            # Step 1: Convert PDF pages to images
             print("\nStep 1: PDF to Image Conversion")
             images = self._pdf_to_images(pdf_path)
             print(f"Converting {len(images)} pages to images")
 
-            # Calculate margin in pixels based on the first page's height
+            # Calculate margins
             if images:
                 page_height = images[0].height
                 self.top_margin = int(self.top_margin_percent * page_height)
                 self.bottom_margin = int(self.bottom_margin_percent * page_height)
                 print(f"Top Margin: {self.top_margin}, Bottom Margin: {self.bottom_margin}")
             
-            # Step 2: Process each page
-            print("\nStep 2: Page Processing")
-            for page_num, page_img in enumerate(images, 1):
-                try:
-                    print(f"\nProcessing page {page_num}/{len(images)}")
-                    
-                    # 2a. Process with Azure Document Intelligence
-                    print(f"Running Azure Document Analysis for page {page_num}")
-                    azure_result = analyze_page_with_azure(
-                        self.azure_client, 
-                        pdf_path, 
-                        page_num, 
-                        self.output_dir
+            # Step 2: Process pages in parallel
+            print("\nStep 2: Parallel Page Processing")
+            max_workers = min(10, len(images))  # Limit concurrent workers
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit tasks for each page
+                futures = {}
+                for page_num, page_img in enumerate(images, 1):
+                    future = executor.submit(
+                        self._process_single_page,
+                        page_num=page_num,
+                        page_img=page_img,
+                        bbox_scaler=bbox_scaler,
+                        pdf_path=pdf_path
                     )
-                    
-                    # Update bounding box scaler with page dimensions
-                    bbox_scaler.set_azure_dimensions(azure_result, page_num)
-                    
-                    # Get Azure page info with error handling
-                    azure_page_info = self._get_azure_page_info(
-                        azure_result=azure_result, 
-                        page_num=1, #because we are using only one page
-                        )
-                    
-                    # print(f"Azure page info: {azure_page_info}")
-                    
-                    # 2b. Detect layout elements
-                    layout_elements = self.layout_detector.detect_elements(page_img, page_num)
-                    print(f"Detected {len(layout_elements)} layout elements")
-                    
-                    # 2c. Save visualization of layout detection
-                    vis_path = self.layout_detector.save_page_with_boxes(
-                        page_img, layout_elements, self.output_dir, page_num
-                    )
-                    print(f"Saved layout visualization to: {vis_path}")
-                    
-                    # 2d. Process Azure text paragraphs
-                    azure_elements = process_azure_paragraphs(
-                        paragraphs = azure_result.get('paragraphs', []),
-                        pdf_name = pdf_path.name,
-                        page_info = azure_page_info,
-                        page_num = page_num,
-                        ignor_roles = self.ignor_roles,
-                        min_length = self.min_length
-                    )
-                    print(f"Processed {len(azure_elements)} Azure text elements")
-                    elements.extend(azure_elements)
-                    
-                    # 2e. Process layout elements with Nougat
-                    layout_records = self._process_layout_elements(
-                        layout_elements,
-                        page_img,
-                        pdf_path.name,
-                        page_num
-                    )
-                    print(f"Processed {len(layout_records)} layout elements")
-                    elements.extend(layout_records)
-                    
-                except Exception as e:
-                    print(f"Error processing page {page_num}: {str(e)}")
-                    continue  # Continue with next page
+                    futures[future] = page_num
+                
+                # Process results as they complete
+                for future in as_completed(futures):
+                    page_num = futures[future]
+                    try:
+                        page_elements = future.result()
+                        elements.extend(page_elements)
+                        print(f"Completed processing page {page_num}/{len(images)}")
+                    except Exception as e:
+                        print(f"Error processing page {page_num}: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
             
             # Step 3: Create and process DataFrame
             print("\nStep 3: Element Processing")
@@ -278,22 +232,15 @@ class EnhancedDocumentAnalyzer:
                 min_column_gap=50,
                 peak_prominence=0.9
             )
-
-            # Get margins and column layout
             margin_sizes, column_layout = margin_detector.detect_margins(df)
-
-            # Filter elements
             df = margin_detector.filter_margin_elements(df, margin_sizes, column_layout)
             print(f"Rows after margin filtering: {len(df)}")
             
             # Step 4: Generate outputs
             print("\nStep 4: Generating Outputs")
-            
-            # 4a. Create markdown
             print("Generating markdown...")
             markdown_text = self._create_markdown_from_df(df)
             
-            # 4b. Create visualizations
             print("Creating visualizations...")
             visualizer = BoundingBoxVisualizer()
             visualization_paths = visualizer.create_overlay_visualization(
@@ -310,6 +257,68 @@ class EnhancedDocumentAnalyzer:
             import traceback
             traceback.print_exc()
             raise
+
+    def _process_single_page(self, page_num, page_img, bbox_scaler, pdf_path):
+        """Process a single page and return extracted elements."""
+        elements = []
+        try:
+            print(f"\nProcessing page {page_num}")
+            
+            # 2a. Process with Azure Document Intelligence
+            print(f"Running Azure Document Analysis for page {page_num}")
+            azure_result = analyze_page_with_azure(
+                self.azure_client, 
+                pdf_path, 
+                page_num, 
+                self.output_dir
+            )
+            
+            # Update bounding box scaler with page dimensions
+            bbox_scaler.set_azure_dimensions(azure_result, page_num)
+            
+            # Get Azure page info with error handling
+            azure_page_info = self._get_azure_page_info(
+                azure_result=azure_result, 
+                page_num=1, #because we are using only one page
+            )
+            
+            # 2b. Detect layout elements
+            layout_elements = self.layout_detector.detect_elements(page_img, page_num)
+            print(f"Detected {len(layout_elements)} layout elements")
+            
+            # 2c. Save visualization of layout detection
+            vis_path = self.layout_detector.save_page_with_boxes(
+                page_img, layout_elements, self.output_dir, page_num
+            )
+            
+            # 2d. Process Azure text paragraphs
+            azure_elements = process_azure_paragraphs(
+                paragraphs = azure_result.get('paragraphs', []),
+                pdf_name = pdf_path.name,
+                page_info = azure_page_info,
+                page_num = page_num,
+                ignor_roles = self.ignor_roles,
+                min_length = self.min_length
+            )
+            print(f"Processed {len(azure_elements)} Azure text elements")
+            elements.extend(azure_elements)
+            
+            # 2e. Process layout elements with Nougat
+            layout_records = self._process_layout_elements(
+                layout_elements,
+                page_img,
+                pdf_path.name,
+                page_num
+            )
+            print(f"Processed {len(layout_records)} layout elements")
+            elements.extend(layout_records)
+            
+        except Exception as e:
+            print(f"Error processing page {page_num}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        return elements
 
     def _create_markdown_from_df(self, df: pd.DataFrame) -> str:
         """
