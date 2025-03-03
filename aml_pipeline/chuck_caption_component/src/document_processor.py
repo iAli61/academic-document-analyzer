@@ -51,15 +51,15 @@ def load_custom_tiktoken(tiktoken_path):
     
     return encoding
 
-encoding = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
+# encoding = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
 
 # Test the encoding
-test_text = "Hello world!"
-tokens = encoding.encode(test_text)
-decoded = encoding.decode(tokens)
+# test_text = "Hello world!"
+# tokens = encoding.encode(test_text)
+# decoded = encoding.decode(tokens)
 
-print(f"Encoded tokens: {tokens}")
-print(f"Decoded text: {decoded}")
+# print(f"Encoded tokens: {tokens}")
+# print(f"Decoded text: {decoded}")
 
 class DocumentProcessor:
     def __init__(
