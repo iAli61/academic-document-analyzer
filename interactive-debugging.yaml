@@ -1,0 +1,36 @@
+name: document_analyzer
+display_name: Document Analyzer
+description: Analyzes multiple PDF documents using Azure Document Intelligence and local processing
+
+inputs:
+  input_folder:
+    type: uri_folder
+    description: Input folder containing PDF files
+  doc_intel_connection_id:
+    type: string
+    description: Azure ML connection ID for Document Intelligence
+  azure_openai_connection_id:
+    type: string
+    description: Azure ML connection ID for OpenAI service
+
+outputs:
+  output_dir:
+    type: uri_folder
+    description: Folder containing visualization images organized by PDF
+
+environment: azureml:doc-analyzer-env:9
+
+compute: azureml:gpu-cluster
+
+services:
+    my_vs_code:
+      type: vs_code
+      nodes: all # For distributed jobs, use the `nodes` property to pick which node you want to enable interactive services on. If `nodes` are not selected, by default, interactive applications are only enabled on the head node. Values are "all", or compute node index (for ex. "0", "1" etc.)
+    my_jupyter_lab:
+      type: jupyter_lab
+      nodes: all
+
+code: .
+
+command: >-
+  echo ${{inputs.input_folder}} && sleep 8h

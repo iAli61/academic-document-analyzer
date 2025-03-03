@@ -1,0 +1,19 @@
+azure-ai-formrecognizer
+torch
+pandas
+numpy
+transformers
+nougat-ocr
+azureml-core
+azure-ai-ml
+azure-storage-blob
+azure-search-documents
+openai>=1.0.0
+python-dotenv
+azure-identity
+azureml-rag[faiss, hugging_face]
+mlflow
+uuid
+tokenizers
+tiktoken
+langchain_community
