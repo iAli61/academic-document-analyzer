@@ -16,6 +16,8 @@ from tiktoken.core import Encoding
 from openai import AzureOpenAI
 from .prompt import *
 from jinja2 import Template
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -431,6 +433,61 @@ class DocumentProcessor:
         """Public method for text chunking that uses the initialized splitter."""
         return self.split_text(text)
 
+
+    def _process_row(self, index, row, summary_map): # Helper function to process a single row
+        try:
+            chunks = self.chunk_text(row['text'])
+
+            # Use pre-calculated summary from summary_map
+            document_summary = summary_map.get(row['pdf_file'].replace('.pdf', ''), '')
+
+            if not chunks and pd.notna(row['image_path']):
+                image_path = str(self.input_folder / row['image_path'])
+                img_class_result = self.get_image_classification(image_path) # keep result name consistent
+                img_class = img_class_result['image_class'] if img_class_result and 'image_class' in img_class_result else None # handle None case
+                if img_class not in [1, 9, 10] and img_class is not None: # Check for None as well
+                    caption = self.generate_caption(
+                        image_path=image_path,
+                        figure_title=None,
+                        document_summary=document_summary
+                    )
+                    chunks = [caption] if caption else []
+                else:
+                    chunks = []
+
+            processed_chunks_data = [] # To hold chunk records for this row
+            for chunk in chunks:
+                chunk_record = {
+                    "content": chunk,
+                    "metadata": {
+                        "page_number": int(row['page']),
+                        "stats": self.get_text_stats(chunk),
+                        "source": {
+                            "filename": row['pdf_file'],
+                            "url": row.get('url', ''),
+                            "mtime": os.path.getmtime(self.input_folder / row['pdf_file']) if os.path.exists(self.input_folder / row['pdf_file']) else None,
+                            "role": row['role'],
+                            "type": row['type'],
+                            "image_path": row['image_path'],
+                            "confidence": row['confidence'],
+                            "source": row['source'],
+                            "bounding_box": row['bounding_box'],
+                            "page": row['page'],
+                            "summary": document_summary, # Use document_summary from map
+                            "id": str(uuid.uuid4())
+                        }
+                    },
+                    "document_id": str(uuid.uuid4())
+                }
+                processed_chunks_data.append(chunk_record) # Collect chunks
+
+            return processed_chunks_data # Return list of chunk records
+
+        except Exception as e:
+            logger.error(f"Error processing row {index}: {str(e)}")
+            return [] # Return empty list in case of error
+
+
     def process(self) -> Tuple[Dict, str]:
         """Process documents and return stats and output file path."""
         try:
@@ -441,18 +498,18 @@ class DocumentProcessor:
                     "error": "No input CSV files found",
                     "timestamp": datetime.now().isoformat()
                 }, "")
-            
+
             input_csv = csv_files[0]
             logger.info(f"Processing CSV file: {input_csv}")
             df = pd.read_csv(input_csv)
-            
+
             if df.empty:
                 logger.error("Input CSV file is empty")
                 return ({
                     "error": "Empty input CSV file",
                     "timestamp": datetime.now().isoformat()
                 }, "")
-            
+
             stats = {
                 "processed": 0,
                 "errors": 0,
@@ -460,94 +517,63 @@ class DocumentProcessor:
                 "input_file": str(input_csv),
                 "total_rows": len(df)
             }
-            
-            # add summaries to dataframe
+
             df['dir_path'] = df['pdf_file'].str.replace('.pdf', '')
 
-            # Group the DataFrame by 'pdf_file' and apply the summary generation function  
-            # to each group  
-            grouped_summaries = df.groupby('dir_path').apply(self.generate_summary_text)  
+            # Generate summaries in parallel using ThreadPoolExecutor
+            logger.info("Generating summaries in parallel...")
+            pdf_groups = df.groupby('dir_path')
+            summary_map = {}
+            with ThreadPoolExecutor() as executor:
+                future_to_pdf = {executor.submit(self.generate_summary_text, group): name for name, group in pdf_groups}
+                for future in as_completed(future_to_pdf):
+                    pdf_name = future_to_pdf[future]
+                    try:
+                        summary_text = future.result()
+                        summary_map[pdf_name] = summary_text # Store summary in map
+                        logger.info(f"Summary generated for {pdf_name[:50]}...: {summary_text[:50]}...")
+                    except Exception as exc:
+                        logger.error(f"Summary generation for {pdf_name} failed: {exc}")
+                        summary_map[pdf_name] = "" # Store empty string if summary fails
 
-            # Now, we need to merge this summary back into the original DataFrame  
-            # We'll map the summary from 'grouped_summaries' to each row based on 'pdf_file'  
-            df['summary'] = df['pdf_file'].map(grouped_summaries)  
-            
+            logger.info("Summaries generated.")
+
             # Create output directory
             self.output_folder.mkdir(parents=True, exist_ok=True)
             output_file = self.output_folder / "processed_chunks.jsonl"
-            
-            with open(output_file, 'w', encoding='utf-8') as f:
-                for idx, row in df.iterrows():
-                    try:
-                        chunks = self.chunk_text(row['text'])
-                        
-                        # If no text, generate caption for image
-                        if not chunks and pd.notna(row['image_path']):
-                            image_path = str(self.input_folder / row['image_path'])
-                            img_class = self.get_image_classification(image_path)
-                            print(f"class of {row['image_path']} is {img_class['image_class']}")
-                            if img_class['image_class'] not in [1, 9, 10]:
-                                
-                                caption = self.generate_caption(
-                                    image_path=image_path,
-                                    figure_title=None, 
-                                    document_summary=row['summary']
-                                    )
-                                chunks = [caption] if caption else []
-                            else:
-                                chunks = []
-                        
-                        for chunk in chunks:
-                            chunk_record = {
-                                "content": chunk,
-                                "metadata": {
-                                    "page_number": int(row['page']),
-                                    "stats": self.get_text_stats(chunk),
-                                    "source": {
-                                        "filename": row['pdf_file'],
-                                        "url": row.get('url', ''),
-                                        "mtime": os.path.getmtime(self.input_folder / row['pdf_file']) if os.path.exists(self.input_folder / row['pdf_file']) else None,
-                                        "role": row['role'],
-                                        "type": row['type'],
-                                        "image_path": row['image_path'],
-                                        "confidence": row['confidence'],
-                                        "source": row['source'],
-                                        "bounding_box": row['bounding_box'],
-                                        "page": row['page'],
-                                        "summary":row['summary'],
-                                        "id": str(uuid.uuid4())
-                                    }
-                                },
-                                "document_id": str(uuid.uuid4())
-                            }
-                            
+
+            processed_rows_count = 0 # Counter for processed rows
+            all_chunks_data = [] # List to collect chunk records from all rows
+
+            logger.info("Processing rows in parallel...")
+            with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool: # Use multiprocessing Pool
+                row_results = pool.starmap(self._process_row, [(index, row, summary_map) for index, row in df.iterrows()]) # Parallel row processing
+
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    for row_chunk_data in row_results: # Iterate through results from parallel processing
+                        for chunk_record in row_chunk_data: # Iterate through chunks returned for each row
                             f.write(json.dumps(chunk_record) + '\n')
-                        
+                            stats["chunks"] += 1
                         stats["processed"] += 1
-                        stats["chunks"] += 1
-                        
-                        if idx > 0 and idx % 100 == 0:
-                            logger.info(f"Processed {idx}/{len(df)} rows ({idx/len(df)*100:.1f}%)")
-                            
-                    except Exception as e:
-                        logger.error(f"Error processing row {idx}: {str(e)}")
-                        stats["errors"] += 1
-                        continue
-            
+                        processed_rows_count += 1
+                        if processed_rows_count > 0 and processed_rows_count % 100 == 0:
+                            logger.info(f"Processed {processed_rows_count}/{len(df)} rows ({processed_rows_count/len(df)*100:.1f}%)")
+
+
             stats["timestamp"] = datetime.now().isoformat()
             stats["completion_status"] = "success"
-            
+
             # Save stats
             stats_file = self.output_folder / "processing_stats.json"
             with open(stats_file, "w") as f:
                 json.dump(stats, f, indent=2)
-            
+
             logger.info(f"Processing completed. Stats saved to: {stats_file}")
             logger.info(f"Processed chunks saved to: {output_file}")
             logger.info(f"Final stats: {stats}")
-            
+
             return (stats, str(output_file))
-            
+
         except Exception as e:
             error_stats = {
                 "error": str(e),

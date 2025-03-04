@@ -24,7 +24,7 @@ def setup_openai_client(connection_id: str) -> AzureOpenAI:
         # Create client for vision
         client = AzureOpenAI(
             api_key=api_key,
-            api_version="2023-03-15-preview",
+            api_version="2024-05-01-preview",
             azure_endpoint=endpoint
         )
         
