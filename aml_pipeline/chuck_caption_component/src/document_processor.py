@@ -14,6 +14,8 @@ import os
 import base64
 from tiktoken.core import Encoding
 from openai import AzureOpenAI
+from .prompt import *
+from jinja2 import Template
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +53,15 @@ def load_custom_tiktoken(tiktoken_path):
     
     return encoding
 
-# encoding = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
+encoding = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
 
 # Test the encoding
-# test_text = "Hello world!"
-# tokens = encoding.encode(test_text)
-# decoded = encoding.decode(tokens)
+test_text = "Hello world!"
+tokens = encoding.encode(test_text)
+decoded = encoding.decode(tokens)
 
-# print(f"Encoded tokens: {tokens}")
-# print(f"Decoded text: {decoded}")
+print(f"Encoded tokens: {tokens}")
+print(f"Decoded text: {decoded}")
 
 class DocumentProcessor:
     def __init__(
@@ -77,6 +79,8 @@ class DocumentProcessor:
         logger.info(f"Output folder: {self.output_folder}")
         self.vision_client = openai_client
         self.vision_deployment_name = vision_deployment_name
+        self.summary_client = openai_client
+        self.summary_deployment_name = vision_deployment_name
         self.max_chunk_length = max_chunk_length
         self.max_image_size = max_image_size
         
@@ -175,29 +179,29 @@ class DocumentProcessor:
             logger.error(f"Image encoding failed for {image_path}: {str(e)}")
             return None
 
-    def generate_caption(self, image_path: str) -> str:
-        """Generate image caption using GPT-4 Vision."""
+    def get_image_classification(self, image_path):
         try:
             base64_image = self.encode_image(image_path)
             if not base64_image:
-                logger.warning(f"Skipping caption generation for invalid image: {image_path}")
+                print(f"Skipping caption generation for invalid image: {image_path}")
                 return ""
 
             max_retries = 3
             for attempt in range(max_retries):
                 try:
                     response = self.vision_client.chat.completions.create(
-                        model=self.vision_deployment_name,
+                        model = self.vision_deployment_name,
+                        response_format={ "type": "json_object" },
                         messages=[
                             {
                                 "role": "system",
-                                "content": "You are an AI specialized in generating precise, technical captions for academic and scientific images. Focus on quantitative details, scientific notation, chemical formulas, experimental conditions, and technical specifications when present. For graphs and plots, describe key trends, axes, and significant data points. For experimental setups, include relevant equipment and configurations. Maintain scientific accuracy and use field-specific terminology appropriately."
+                                "content": IMAGE_CLASSIFICATION_SYSTEM_PROMPT
                             },
                             {
                                 "role": "user",
                                 "content": [
                                     {"type": "text", 
-                                     "text": "Generate a detailed, comprehensive caption for this academic image. Include: 1) The type of visualization (e.g., graph, experimental setup, chemical structure, microscopy image, etc.), 2) Key quantitative information or trends if present, 3) Important experimental conditions or parameters if shown, 4) Any chemical formulas, reactions, or mathematical equations if present. Focus on precision and completeness while maintaining conciseness."
+                                     "text": IMAGE_CLASSIFICATION_USER_PROMPT
                                     },
                                     {
                                         "type": "image_url",
@@ -208,20 +212,135 @@ class DocumentProcessor:
                                 ]
                             }
                         ],
+                        temperature=0.0,
                         max_tokens=100
+                    )
+                    return json.loads(response.choices[0].message.content)
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"Image classification attempt {attempt + 1} failed: {str(e)}")
+                        continue
+                    else:
+                        print(f"All image classification attempts failed for {image_path}")
+                        return None
+
+        except Exception as e:
+            print(f"Image classification failed: {str(e)}")
+            return None
+
+
+    def get_summary(self, raw_text):
+        try:
+            template = Template(DOCUMENT_SUMMARIZATION_USER_PROMPT)
+            user_prompt = template.render(DOCUMENT_TEXT=raw_text)
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = self.summary_client.chat.completions.create(
+                        model = self.summary_deployment_name,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": DOCUMENT_SUMMARIZATION_SYSTEM_PROMPT
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", 
+                                     "text": user_prompt
+                                    }
+                                ]
+                            }
+                        ],
+                        temperature=0.0,
+                        max_tokens=4000
                     )
                     return response.choices[0].message.content
 
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        logger.warning(f"Caption generation attempt {attempt + 1} failed: {str(e)}")
+                        print(f"Summary generation attempt {attempt + 1} failed: {str(e)}")
                         continue
                     else:
-                        logger.error(f"All caption generation attempts failed for {image_path}")
+                        print(f"All summary generation attempts failed for {image_path}")
                         return ""
 
         except Exception as e:
-            logger.error(f"Caption generation failed for {image_path}: {str(e)}")
+            print(f"Summary generation failed: {str(e)}")
+            return ""
+        
+    def generate_summary_text(self, pdf_group): # Assuming this is your function
+        """
+        Generates a summary text for a group of rows belonging to the same PDF.
+        (Replace this with your actual summary generation logic)
+        """
+        dir_path = pdf_group['dir_path'].iloc[0] # get pdf file name from the group
+        md_file_path = f"{self.input_folder}/{dir_path}/{dir_path}_analysis.md"
+        print(md_file_path)
+
+        # Read the contents of the file  
+        with open(md_file_path, 'r') as md_file:
+            
+            md_content = md_file.read()
+            print(f"md text: {md_content[:100]}...")
+
+        summary_text = self.get_summary(md_content)
+        print(f"summary: {summary_text[:100]}...")
+        return summary_text
+
+    def generate_caption(self, image_path, figure_title, document_summary) -> str:
+        """Generate image caption using GPT-4 Vision."""
+        try:
+            base64_image = self.encode_image(image_path)
+            if not base64_image:
+                print(f"Skipping caption generation for invalid image: {image_path}")
+                return ""
+
+            template = Template(IMAGE_CAPTIONING_USER_PROMPT)
+            user_prompt = template.render(IMAGE_TITLE=figure_title, DOCUMENT_CONTEXT=document_summary)
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = self.vision_client.chat.completions.create(
+                        model = self.vision_deployment_name,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": IMAGE_CAPTIONING_SYSTEM_PROMPT
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", 
+                                     "text": user_prompt
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/jpeg;base64,{base64_image}"
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        temperature=0.0,
+                        max_tokens=2000
+                    )
+                    return response.choices[0].message.content
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"Caption generation attempt {attempt + 1} failed: {str(e)}")
+                        continue
+                    else:
+                        print(f"All caption generation attempts failed for {image_path}")
+                        return ""
+
+        except Exception as e:
+            print(f"Caption generation failed for {image_path}: {str(e)}")
             return ""
 
     def get_text_stats(self, text: str) -> Dict:
@@ -342,6 +461,17 @@ class DocumentProcessor:
                 "total_rows": len(df)
             }
             
+            # add summaries to dataframe
+            df['dir_path'] = df['pdf_file'].str.replace('.pdf', '')
+
+            # Group the DataFrame by 'pdf_file' and apply the summary generation function  
+            # to each group  
+            grouped_summaries = df.groupby('dir_path').apply(self.generate_summary_text)  
+
+            # Now, we need to merge this summary back into the original DataFrame  
+            # We'll map the summary from 'grouped_summaries' to each row based on 'pdf_file'  
+            df['summary'] = df['pdf_file'].map(grouped_summaries)  
+            
             # Create output directory
             self.output_folder.mkdir(parents=True, exist_ok=True)
             output_file = self.output_folder / "processed_chunks.jsonl"
@@ -354,8 +484,18 @@ class DocumentProcessor:
                         # If no text, generate caption for image
                         if not chunks and pd.notna(row['image_path']):
                             image_path = str(self.input_folder / row['image_path'])
-                            caption = self.generate_caption(image_path)
-                            chunks = [caption] if caption else []
+                            img_class = self.get_image_classification(image_path)
+                            print(f"class of {row['image_path']} is {img_class['image_class']}")
+                            if img_class['image_class'] not in [1, 9, 10]:
+                                
+                                caption = self.generate_caption(
+                                    image_path=image_path,
+                                    figure_title=None, 
+                                    document_summary=row['summary']
+                                    )
+                                chunks = [caption] if caption else []
+                            else:
+                                chunks = []
                         
                         for chunk in chunks:
                             chunk_record = {
@@ -374,6 +514,7 @@ class DocumentProcessor:
                                         "source": row['source'],
                                         "bounding_box": row['bounding_box'],
                                         "page": row['page'],
+                                        "summary":row['summary'],
                                         "id": str(uuid.uuid4())
                                     }
                                 },
