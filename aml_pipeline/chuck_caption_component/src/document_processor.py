@@ -18,8 +18,78 @@ from .prompt import *
 from jinja2 import Template
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Ensure logs propagate to Azure ML by adding a StreamHandler to stdout
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+
+# Define a simple log format
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Avoid adding multiple handlers if the logger already has handlers
+if not logger.handlers:
+    logger.addHandler(handler)
+
+logger.propagate = True
+
+class_names = {
+    1: "Data table",
+    2: "Statistical table",
+    3: "Line graph",
+    4: "Bar chart",
+    5: "Scatter plot",
+    6: "Box plot",
+    7: "Histogram",
+    8: "Pie chart",
+    9: "Heat map",
+    10: "Network graph",                
+    11: "Time series plot",
+    12: "Light microscopy",
+    13: "Electron microscopy",
+    14: "Fluorescence microscopy",
+    15: "Confocal microscopy",
+    16: "Mass spectroscopy",
+    17: "NMR spectroscopy",
+    18: "IR spectroscopy",
+    19: "UV-vis spectroscopy",
+    20: "X-ray spectroscopy",
+    21: "X-ray (medical)",
+    22: "CT scan",
+    23: "MRI scan",
+    24: "Ultrasound",
+    25: "PET scan",
+    26: "Histology slide",
+    27: "Western blot",
+    28: "Gel electrophoresis",
+    29: "Chemical structure",
+    30: "Molecular diagram",
+    31: "Anatomical illustration",
+    32: "Flowchart",
+    33: "Schematic diagram",
+    34: "Circuit diagram",
+    35: "Mechanical diagram",
+    36: "Process flow diagram",
+    37: "Geographic map",
+    38: "GIS visualization",    
+    39: "Satellite image",
+    40: "Equation/Mathematical expression",
+    41: "Geometric figure",
+    42: "3D rendering",     
+    43: "Computer simulation",
+    44: "Field photograph",
+    45: "Sample photograph",
+    46: "Experimental setup",
+    47: "Equipment photograph",
+    48: "Screenshot",
+    49: "Logo/Institutional insignia",
+    50: "Infographic",
+    51: "other"
+}
 
 def load_custom_tiktoken(tiktoken_path):
     """
@@ -55,7 +125,9 @@ def load_custom_tiktoken(tiktoken_path):
     
     return encoding
 
-encoding = load_custom_tiktoken("./src/tiktoken_files/cl100k_base.tiktoken")
+current_file_path = Path(__file__).resolve().parent
+tiktoken_file_path = current_file_path / "tiktoken_files/cl100k_base.tiktoken"
+encoding = load_custom_tiktoken(tiktoken_file_path)
 
 # Test the encoding
 test_text = "Hello world!"
@@ -185,7 +257,7 @@ class DocumentProcessor:
         try:
             base64_image = self.encode_image(image_path)
             if not base64_image:
-                print(f"Skipping caption generation for invalid image: {image_path}")
+                logger.info(f"Skipping caption generation for invalid image: {image_path}")
                 return ""
 
             max_retries = 3
@@ -221,14 +293,14 @@ class DocumentProcessor:
 
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        print(f"Image classification attempt {attempt + 1} failed: {str(e)}")
+                        logger.info(f"Image classification attempt {attempt + 1} failed: {str(e)}")
                         continue
                     else:
-                        print(f"All image classification attempts failed for {image_path}")
+                        logger.info(f"All image classification attempts failed for {image_path}")
                         return None
 
         except Exception as e:
-            print(f"Image classification failed: {str(e)}")
+            logger.info(f"Image classification failed: {str(e)}")
             return None
 
 
@@ -263,14 +335,14 @@ class DocumentProcessor:
 
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        print(f"Summary generation attempt {attempt + 1} failed: {str(e)}")
+                        logger.info(f"Summary generation attempt {attempt + 1} failed: {str(e)}")
                         continue
                     else:
-                        print(f"All summary generation attempts failed for {image_path}")
+                        logger.info(f"All summary generation attempts failed for {raw_text[:100]}")
                         return ""
 
         except Exception as e:
-            print(f"Summary generation failed: {str(e)}")
+            logger.info(f"Summary generation failed: {str(e)}")
             return ""
         
     def generate_summary_text(self, pdf_group): # Assuming this is your function
@@ -280,16 +352,16 @@ class DocumentProcessor:
         """
         dir_path = pdf_group['dir_path'].iloc[0] # get pdf file name from the group
         md_file_path = f"{self.input_folder}/{dir_path}/{dir_path}_analysis.md"
-        print(md_file_path)
+        logger.info(md_file_path)
 
         # Read the contents of the file  
         with open(md_file_path, 'r') as md_file:
             
             md_content = md_file.read()
-            print(f"md text: {md_content[:100]}...")
+            logger.info(f"md text: {md_content[:100]}...")
 
         summary_text = self.get_summary(md_content)
-        print(f"summary: {summary_text[:100]}...")
+        logger.info(f"summary: {summary_text[:100]}...")
         return summary_text
 
     def generate_caption(self, image_path, figure_title, document_summary) -> str:
@@ -297,7 +369,7 @@ class DocumentProcessor:
         try:
             base64_image = self.encode_image(image_path)
             if not base64_image:
-                print(f"Skipping caption generation for invalid image: {image_path}")
+                logger.info(f"Skipping caption generation for invalid image: {image_path}")
                 return ""
 
             template = Template(IMAGE_CAPTIONING_USER_PROMPT)
@@ -335,14 +407,14 @@ class DocumentProcessor:
 
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        print(f"Caption generation attempt {attempt + 1} failed: {str(e)}")
+                        logger.info(f"Caption generation attempt {attempt + 1} failed: {str(e)}")
                         continue
                     else:
-                        print(f"All caption generation attempts failed for {image_path}")
+                        logger.info(f"All caption generation attempts failed for {image_path}")
                         return ""
 
         except Exception as e:
-            print(f"Caption generation failed for {image_path}: {str(e)}")
+            logger.info(f"Caption generation failed for {image_path}: {str(e)}")
             return ""
 
     def get_text_stats(self, text: str) -> Dict:
@@ -433,61 +505,6 @@ class DocumentProcessor:
         """Public method for text chunking that uses the initialized splitter."""
         return self.split_text(text)
 
-
-    def _process_row(self, index, row, summary_map): # Helper function to process a single row
-        try:
-            chunks = self.chunk_text(row['text'])
-
-            # Use pre-calculated summary from summary_map
-            document_summary = summary_map.get(row['pdf_file'].replace('.pdf', ''), '')
-
-            if not chunks and pd.notna(row['image_path']):
-                image_path = str(self.input_folder / row['image_path'])
-                img_class_result = self.get_image_classification(image_path) # keep result name consistent
-                img_class = img_class_result['image_class'] if img_class_result and 'image_class' in img_class_result else None # handle None case
-                if img_class not in [1, 9, 10] and img_class is not None: # Check for None as well
-                    caption = self.generate_caption(
-                        image_path=image_path,
-                        figure_title=None,
-                        document_summary=document_summary
-                    )
-                    chunks = [caption] if caption else []
-                else:
-                    chunks = []
-
-            processed_chunks_data = [] # To hold chunk records for this row
-            for chunk in chunks:
-                chunk_record = {
-                    "content": chunk,
-                    "metadata": {
-                        "page_number": int(row['page']),
-                        "stats": self.get_text_stats(chunk),
-                        "source": {
-                            "filename": row['pdf_file'],
-                            "url": row.get('url', ''),
-                            "mtime": os.path.getmtime(self.input_folder / row['pdf_file']) if os.path.exists(self.input_folder / row['pdf_file']) else None,
-                            "role": row['role'],
-                            "type": row['type'],
-                            "image_path": row['image_path'],
-                            "confidence": row['confidence'],
-                            "source": row['source'],
-                            "bounding_box": row['bounding_box'],
-                            "page": row['page'],
-                            "summary": document_summary, # Use document_summary from map
-                            "id": str(uuid.uuid4())
-                        }
-                    },
-                    "document_id": str(uuid.uuid4())
-                }
-                processed_chunks_data.append(chunk_record) # Collect chunks
-
-            return processed_chunks_data # Return list of chunk records
-
-        except Exception as e:
-            logger.error(f"Error processing row {index}: {str(e)}")
-            return [] # Return empty list in case of error
-
-
     def process(self) -> Tuple[Dict, str]:
         """Process documents and return stats and output file path."""
         try:
@@ -546,8 +563,17 @@ class DocumentProcessor:
             all_chunks_data = [] # List to collect chunk records from all rows
 
             logger.info("Processing rows in parallel...")
-            with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool: # Use multiprocessing Pool
-                row_results = pool.starmap(self._process_row, [(index, row, summary_map) for index, row in df.iterrows()]) # Parallel row processing
+            api_key = self.vision_client.api_key
+            endpoint = self.vision_client.base_url
+
+            with multiprocessing.Pool(processes=8) as pool:
+                row_results = pool.starmap(
+                    process_row_worker,
+                    [
+                        (index, row, summary_map, self.input_folder, api_key, endpoint, self.vision_deployment_name, self.max_chunk_length)
+                        for index, row in df.iterrows()
+                    ]
+                )
 
                 with open(output_file, 'w', encoding='utf-8') as f:
                     for row_chunk_data in row_results: # Iterate through results from parallel processing
@@ -571,6 +597,7 @@ class DocumentProcessor:
             logger.info(f"Processing completed. Stats saved to: {stats_file}")
             logger.info(f"Processed chunks saved to: {output_file}")
             logger.info(f"Final stats: {stats}")
+            
 
             return (stats, str(output_file))
 
@@ -582,3 +609,106 @@ class DocumentProcessor:
             }
             logger.error(f"Critical error in document processing: {str(e)}")
             return (error_stats, "")
+
+def process_row_worker(index, row, summary_map, input_folder, api_key, endpoint, vision_deployment_name, max_chunk_length):
+    try:
+        # Initialize variables that might be conditionally assigned
+        img_class = None
+        probability_score = None
+
+        logger.info(f"azure endpoint: {str(endpoint)}")
+        
+        # Initialize AzureOpenAI client inside the worker
+        vision_client = AzureOpenAI(
+            api_key=api_key,
+            api_version="2024-05-01-preview",
+            azure_endpoint=str(endpoint).replace("/openai/", "/")
+        )
+      
+        has_text = not pd.isna(row['text']) and len(row['text']) > 0
+        if index % 1 == 0:  # Log only periodically
+            if has_text:
+                logger.info(f"Row {index} - Has text: {has_text}, Text length: {len(row['text'])}")
+            else:
+                logger.info(f"Row {index} - No text found")
+        
+        # Initialize DocumentProcessor instance locally (minimal setup)
+        processor = DocumentProcessor(
+            input_folder=input_folder,
+            output_folder="temp",  # Temporary placeholder
+            openai_client=vision_client,
+            vision_deployment_name=vision_deployment_name,
+            max_chunk_length=max_chunk_length
+        )
+
+        chunks = processor.chunk_text(row['text'])
+        logger.info(f"Row {index} - Chunks from text: {len(chunks)}")
+
+        document_summary = summary_map.get(row['pdf_file'].replace('.pdf', ''), '')
+
+        if not chunks and pd.notna(row['image_path']):
+            # Log image processing
+            if index % 1 == 0:  # Log only periodically
+                logger.info(f"Row {index} - Processing image: {row['image_path']}")
+                
+            # Use string joining instead of Path object for safer handling
+            image_path = os.path.join(input_folder, str(row['image_path']))
+            
+            img_class_result = processor.get_image_classification(image_path)
+            logger.info(f"Row {index} - Image classification result: {img_class_result}")
+            img_class = img_class_result.get('image_class') if img_class_result else None
+            probability_score = img_class_result.get('probability_score') if img_class_result else None
+            if img_class not in [49, 50, 51] and img_class is not None:
+                caption = processor.generate_caption(
+                    image_path=image_path,
+                    figure_title=None,
+                    document_summary=document_summary
+                )
+                chunks = [caption] if caption else []
+                
+                if index % 500 == 0:  # Log only periodically
+                    logger.info(f"Row {index} - Caption generated: {len(caption) if caption else 0} chars")
+            else:
+                chunks = []
+                if index % 500 == 0 and img_class is not None:  # Log only periodically
+                    logger.info(f"Row {index} - Image class {img_class} filtered out")
+
+        # Final check on chunks
+        if not chunks and index % 500 == 0:  # Log only periodically
+            logger.info(f"Row {index} - No chunks generated")
+
+        processed_chunks_data = []
+        for chunk in chunks:
+            chunk_record = {
+                "content": chunk,
+                "metadata": {
+                    "page_number": int(row['page']),
+                    "stats": processor.get_text_stats(chunk),
+                    "source": {
+                        "filename": row['pdf_file'],
+                        "url": str(row.get('url', '')),
+                        "mtime": os.path.getmtime(Path(input_folder) / row['pdf_file']) if os.path.exists(Path(input_folder) / row['pdf_file']) else None,
+                        "role": str(row['role']),
+                        "type": str(row['type']),
+                        "image_path": str(row['image_path']) if pd.notna(row['image_path']) else None,
+                        "confidence": row['confidence'],
+                        "source": str(row['source']),
+                        "bounding_box": str(row['bounding_box']),
+                        "normalized_box": row['normalized_box'],
+                        "image_class_no": img_class if img_class is not None else None,
+                        "image_class_prob": probability_score if probability_score is not None else None,
+                        "image_class_name": class_names.get(img_class) if img_class is not None else None,
+                        "page": row['page'],
+                        "summary": document_summary,
+                        "id": str(uuid.uuid4())
+                    }
+                },
+                "document_id": str(uuid.uuid4())
+            }
+            processed_chunks_data.append(chunk_record)
+
+        return processed_chunks_data
+
+    except Exception as e:
+        logger.error(f"Error processing row {index}: {str(e)}")
+        return []

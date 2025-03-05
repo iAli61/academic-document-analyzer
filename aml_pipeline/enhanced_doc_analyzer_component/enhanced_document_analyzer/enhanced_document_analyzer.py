@@ -403,7 +403,7 @@ class EnhancedDocumentAnalyzer:
             img_path = self._save_element_image(page_img, elem, page_num, self.top_margin, self.bottom_margin)
             
             # Extract text using appropriate method
-            if extraction_method == 'nougat' and elem_type != DocumentElementType.IMAGE:
+            if extraction_method == 'nougat' and elem_type != DocumentElementType.IMAGE and elem_type != DocumentElementType.TABLE:
                 extracted_text = self._extract_text_with_nougat(elem, page_num, img_path, elem_type)
             else:
                 extracted_text = None
