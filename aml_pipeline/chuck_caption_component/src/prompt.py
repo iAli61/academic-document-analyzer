@@ -66,6 +66,7 @@ Your task is to analyze an input image and classify it into **one of the followi
 48. Screenshot
 49. Logo/Institutional insignia
 50. Infographic
+52. Hand-written signatures
 51. other 
 
 Always return **only a single category** that best matches the image. Prioritize **chemically and scientifically relevant** labels when applicable. Your response must be in **valid JSON format**, containing:

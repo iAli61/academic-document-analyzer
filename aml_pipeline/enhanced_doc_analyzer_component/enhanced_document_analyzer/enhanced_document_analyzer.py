@@ -2,6 +2,7 @@ import pandas as pd
 import pymupdf   # PyMuPDF
 from PIL import Image
 from pathlib import Path
+import logging
 from typing import Tuple, List, Dict
 import os
 import numpy as np
@@ -20,6 +21,23 @@ from .bounding_box_scaler import BoundingBoxScaler
 from .azure_utils import analyze_page_with_azure, process_azure_paragraphs
 from .overlap_utils import filter_overlapping_elements
 from .margin_detector import MarginDetector
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Ensure logs propagate to Azure ML by adding a StreamHandler to stdout
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+
+# Define a simple log format
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Avoid adding multiple handlers if the logger already has handlers
+if not logger.handlers:
+    logger.addHandler(handler)
+
+logger.propagate = True
 
 
 class EnhancedDocumentAnalyzer:
@@ -147,13 +165,13 @@ class EnhancedDocumentAnalyzer:
                 raise ValueError(f"No valid pages found in Azure results")
                 
             closest_page_num = min(available_pages, key=lambda x: abs(x - page_num))
-            print(f"Warning: Page {page_num} not found, using closest match: {closest_page_num}")
+            logger.info(f"Warning: Page {page_num} not found, using closest match: {closest_page_num}")
             
             return next(p for p in azure_result['pages'] 
                     if p.get('page_number') == closest_page_num)
                     
         except Exception as e:
-            print(f"Error getting page info for page {page_num}: {str(e)}")
+            logger.info(f"Error getting page info for page {page_num}: {str(e)}")
             # Return default values as fallback
             return {
                 'page_number': page_num,
@@ -168,26 +186,26 @@ class EnhancedDocumentAnalyzer:
         """Parallelized document analysis using ThreadPoolExecutor."""
         pdf_path = Path(pdf_path)
         elements = []
-        print(f"\nProcessing document: {pdf_path}")
+        logger.info(f"\nProcessing document: {pdf_path}")
         
         try:
             # Initialize bounding box scaler
             bbox_scaler = BoundingBoxScaler(str(pdf_path))
             
             # Step 1: Convert PDF pages to images
-            print("\nStep 1: PDF to Image Conversion")
+            logger.info("\nStep 1: PDF to Image Conversion")
             images = self._pdf_to_images(pdf_path)
-            print(f"Converting {len(images)} pages to images")
+            logger.info(f"Converting {len(images)} pages to images")
 
             # Calculate margins
             if images:
                 page_height = images[0].height
                 self.top_margin = int(self.top_margin_percent * page_height)
                 self.bottom_margin = int(self.bottom_margin_percent * page_height)
-                print(f"Top Margin: {self.top_margin}, Bottom Margin: {self.bottom_margin}")
+                logger.info(f"Top Margin: {self.top_margin}, Bottom Margin: {self.bottom_margin}")
             
             # Step 2: Process pages in parallel
-            print("\nStep 2: Parallel Page Processing")
+            logger.info("\nStep 2: Parallel Page Processing")
             max_workers = min(10, len(images))  # Limit concurrent workers
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit tasks for each page
@@ -208,28 +226,28 @@ class EnhancedDocumentAnalyzer:
                     try:
                         page_elements = future.result()
                         elements.extend(page_elements)
-                        print(f"Completed processing page {page_num}/{len(images)}")
+                        logger.info(f"Completed processing page {page_num}/{len(images)}")
                     except Exception as e:
-                        print(f"Error processing page {page_num}: {str(e)}")
+                        logger.info(f"Error processing page {page_num}: {str(e)}")
                         import traceback
                         traceback.print_exc()
             
             # Step 3: Create and process DataFrame
-            print("\nStep 3: Element Processing")
+            logger.info("\nStep 3: Element Processing")
             df = self._create_dataframe(elements)
-            print(f"Initial DataFrame rows: {len(df)}")
+            logger.info(f"Initial DataFrame rows: {len(df)}")
             
             # 3a. Normalize bounding boxes
-            print("Normalizing bounding boxes...")
+            logger.info("Normalizing bounding boxes...")
             df = bbox_scaler.normalize_bounding_boxes(df)
             
             # 3b. Filter overlapping elements
-            print("Filtering overlapping elements...")
+            logger.info("Filtering overlapping elements...")
             df = filter_overlapping_elements(df, self.overlap_threshold)
-            print(f"Rows after overlap filtering: {len(df)}")
+            logger.info(f"Rows after overlap filtering: {len(df)}")
             
             # 3c. Filter margin elements
-            print("Filtering margin elements...")
+            logger.info("Filtering margin elements...")
             margin_detector = MarginDetector(
                 density_bins=500,
                 min_column_gap=50,
@@ -237,26 +255,26 @@ class EnhancedDocumentAnalyzer:
             )
             margin_sizes, column_layout = margin_detector.detect_margins(df)
             df = margin_detector.filter_margin_elements(df, margin_sizes, column_layout)
-            print(f"Rows after margin filtering: {len(df)}")
+            logger.info(f"Rows after margin filtering: {len(df)}")
             
             # Step 4: Generate outputs
-            print("\nStep 4: Generating Outputs")
-            print("Generating markdown...")
+            logger.info("\nStep 4: Generating Outputs")
+            logger.info("Generating markdown...")
             markdown_text = self._create_markdown_from_df(df)
             
-            print("Creating visualizations...")
+            logger.info("Creating visualizations...")
             visualizer = BoundingBoxVisualizer()
             visualization_paths = visualizer.create_overlay_visualization(
                 pdf_path,
                 df,
                 self.output_dir
             )
-            print(f"Created {len(visualization_paths)} page visualizations")
+            logger.info(f"Created {len(visualization_paths)} page visualizations")
             
             return markdown_text, df, visualization_paths
             
         except Exception as e:
-            print(f"\nError processing document: {str(e)}")
+            logger.info(f"\nError processing document: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -265,10 +283,10 @@ class EnhancedDocumentAnalyzer:
         """Process a single page and return extracted elements."""
         elements = []
         try:
-            print(f"\nProcessing page {page_num}")
+            logger.info(f"\nProcessing page {page_num}")
             
             # 2a. Process with Azure Document Intelligence
-            print(f"Running Azure Document Analysis for page {page_num}")
+            logger.info(f"Running Azure Document Analysis for page {page_num}")
             azure_result = analyze_page_with_azure(
                 self.azure_client, 
                 pdf_path, 
@@ -287,7 +305,7 @@ class EnhancedDocumentAnalyzer:
             
             # 2b. Detect layout elements
             layout_elements = self.layout_detector.detect_elements(page_img, page_num)
-            print(f"Detected {len(layout_elements)} layout elements")
+            logger.info(f"Detected {len(layout_elements)} layout elements")
             
             # 2c. Save visualization of layout detection
             vis_path = self.layout_detector.save_page_with_boxes(
@@ -303,7 +321,7 @@ class EnhancedDocumentAnalyzer:
                 ignor_roles = self.ignor_roles,
                 min_length = self.min_length
             )
-            print(f"Processed {len(azure_elements)} Azure text elements")
+            logger.info(f"Processed {len(azure_elements)} Azure text elements")
             elements.extend(azure_elements)
             
             # 2e. Process layout elements with Nougat
@@ -313,11 +331,11 @@ class EnhancedDocumentAnalyzer:
                 pdf_path.name,
                 page_num
             )
-            print(f"Processed {len(layout_records)} layout elements")
+            logger.info(f"Processed {len(layout_records)} layout elements")
             elements.extend(layout_records)
             
         except Exception as e:
-            print(f"Error processing page {page_num}: {str(e)}")
+            logger.info(f"Error processing page {page_num}: {str(e)}")
             import traceback
             traceback.print_exc()
         
@@ -452,7 +470,7 @@ class EnhancedDocumentAnalyzer:
                 except (RuntimeError, OutOfMemoryError) as e:
                     # Check if this is a CUDA out of memory error
                     if "CUDA out of memory" in str(e):
-                        print(f"CUDA out of memory on attempt {attempt + 1}, clearing cache and retrying...")
+                        logger.info(f"CUDA out of memory on attempt {attempt + 1}, clearing cache and retrying...")
                         
                         # Force garbage collection
                         import gc
@@ -464,14 +482,14 @@ class EnhancedDocumentAnalyzer:
                         
                         if attempt == max_attempts - 1:
                             # Final attempt - try on CPU
-                            print(f"Trying final attempt on CPU for {elem.label} on page {page_num}")
+                            logger.info(f"Trying final attempt on CPU for {elem.label} on page {page_num}")
                             try:
                                 # Force CPU processing
                                 extracted_text = self.nougat_service.get_text_from_nougat(img_path, device="cpu")
                                 if extracted_text:
                                     break
                             except Exception as cpu_error:
-                                print(f"CPU fallback failed: {str(cpu_error)}")
+                                logger.info(f"CPU fallback failed: {str(cpu_error)}")
                         
                         continue
                     # Re-raise if not a CUDA memory issue
@@ -479,16 +497,16 @@ class EnhancedDocumentAnalyzer:
                 except AttributeError as ae:
                     # Handle specific model attribute errors
                     if 'pos_drop' in str(ae):
-                        print(f"Warning: Known model attribute issue encountered (attempt {attempt + 1}/{max_attempts})")
+                        logger.info(f"Warning: Known model attribute issue encountered (attempt {attempt + 1}/{max_attempts})")
                         continue
                     else:
                         raise ae
                 except Exception as e:
                     if attempt < max_attempts - 1:
-                        print(f"Extraction attempt {attempt + 1} failed, retrying...")
+                        logger.info(f"Extraction attempt {attempt + 1} failed, retrying...")
                         continue
                     else:
-                        print(f"Error extracting text with Nougat for {elem.label} on page {page_num}: {str(e)}")
+                        logger.info(f"Error extracting text with Nougat for {elem.label} on page {page_num}: {str(e)}")
                         break
             
             if not extracted_text:
@@ -504,11 +522,11 @@ class EnhancedDocumentAnalyzer:
                         )
                         extracted_text = azure_result["content"]
                     except Exception as e:
-                        print(f"Azure OCR fallback failed for table on page {page_num}: {str(e)}")
+                        logger.info(f"Azure OCR fallback failed for table on page {page_num}: {str(e)}")
                 else:
-                    print(f"Warning: No text extracted from {elem.label} on page {page_num}")
+                    logger.info(f"Warning: No text extracted from {elem.label} on page {page_num}")
         except Exception as e:
-            print(f"Error processing {elem.label} image on page {page_num}: {str(e)}")
+            logger.info(f"Error processing {elem.label} image on page {page_num}: {str(e)}")
         
         return extracted_text
 
