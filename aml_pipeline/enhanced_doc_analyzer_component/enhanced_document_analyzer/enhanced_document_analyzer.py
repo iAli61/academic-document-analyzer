@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Tuple, List, Dict
 import os
 import numpy as np
+import torch  # Add torch import
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -27,11 +28,12 @@ class EnhancedDocumentAnalyzer:
                  endpoint: str, 
                  output_dir: str = "output",
                  confidence_threshold: float = 0.7,
-                 min_length: int = 10,
+                 min_length: int = 0,
                  overlap_threshold: float = 0.5,
                  ignor_roles: List[str] = ['pageFooter','footnote'],
-                 top_margin_percent: float = 0.0,  # as a percentage of page height
-                 bottom_margin_percent: float = 0.0
+                 top_margin_percent: float = 0.05,  # as a ration of page height
+                 bottom_margin_percent: float = 0.05,  # as a percentage of page height
+                 ocr_elements: List[str] = ['formula']
                  ):
         """Initialize the document analyzer with both Azure and local services."""
         self.output_dir = Path(output_dir)
@@ -42,6 +44,7 @@ class EnhancedDocumentAnalyzer:
         
         # Layout detection for images and tables
         self.layout_detector = LayoutDetectionService(confidence_threshold)
+        self.ocr_elements = ocr_elements
         
         # Initialize Nougat service for complex elements
         self.nougat_service = NougatService()
@@ -351,7 +354,7 @@ class EnhancedDocumentAnalyzer:
                         markdown.append(f"\n![]({rel_path})\n")
                     except ValueError:
                         markdown.append(f"\n![](/{row['image_path']})\n")
-            elif row['type'] in ['table', 'formula']:
+            elif row['type'] in self.ocr_elements:
                 # Add both image and extracted text for tables and formulas
                 if row['image_path']:
                     try:
@@ -399,8 +402,13 @@ class EnhancedDocumentAnalyzer:
             else:
                 continue
                 
-            # Save element image
-            img_path = self._save_element_image(page_img, elem, page_num, self.top_margin, self.bottom_margin)
+            # Save element image with margins for IMAGE or TABLE types
+            if elem_type in [DocumentElementType.IMAGE, DocumentElementType.TABLE]:
+                # Add margins for better context when extracting from images and tables
+                img_path = self._save_element_image(page_img, elem, page_num, self.top_margin, self.bottom_margin)
+            else:
+                # No extra margins for formulas and captions for precision
+                img_path = self._save_element_image(page_img, elem, page_num, 0, 0)
             
             # Extract text using appropriate method
             if extraction_method == 'nougat' and elem_type != DocumentElementType.IMAGE and elem_type != DocumentElementType.TABLE:
@@ -433,10 +441,41 @@ class EnhancedDocumentAnalyzer:
             max_attempts = 3
             for attempt in range(max_attempts):
                 try:
+                    # Clear CUDA cache before processing to free memory
+                    if hasattr(torch, 'cuda') and torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    
                     # Process with Nougat
                     extracted_text = self.nougat_service.get_text_from_nougat(img_path)
                     if extracted_text:
                         break
+                except (RuntimeError, OutOfMemoryError) as e:
+                    # Check if this is a CUDA out of memory error
+                    if "CUDA out of memory" in str(e):
+                        print(f"CUDA out of memory on attempt {attempt + 1}, clearing cache and retrying...")
+                        
+                        # Force garbage collection
+                        import gc
+                        gc.collect()
+                        
+                        # Clear CUDA cache
+                        if hasattr(torch, 'cuda') and torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        
+                        if attempt == max_attempts - 1:
+                            # Final attempt - try on CPU
+                            print(f"Trying final attempt on CPU for {elem.label} on page {page_num}")
+                            try:
+                                # Force CPU processing
+                                extracted_text = self.nougat_service.get_text_from_nougat(img_path, device="cpu")
+                                if extracted_text:
+                                    break
+                            except Exception as cpu_error:
+                                print(f"CPU fallback failed: {str(cpu_error)}")
+                        
+                        continue
+                    # Re-raise if not a CUDA memory issue
+                    raise
                 except AttributeError as ae:
                     # Handle specific model attribute errors
                     if 'pos_drop' in str(ae):

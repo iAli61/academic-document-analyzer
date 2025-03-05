@@ -658,7 +658,7 @@ def process_row_worker(index, row, summary_map, input_folder, api_key, endpoint,
             logger.info(f"Row {index} - Image classification result: {img_class_result}")
             img_class = img_class_result.get('image_class') if img_class_result else None
             probability_score = img_class_result.get('probability_score') if img_class_result else None
-            if img_class not in [49, 50, 51] and img_class is not None:
+            if img_class is not None and img_class > 48:
                 caption = processor.generate_caption(
                     image_path=image_path,
                     figure_title=None,
