@@ -508,50 +508,42 @@ class EnhancedDocumentAnalyzer:
             
         return records
 
+    def _clear_gpu_memory(self):
+        """Helper method to clear GPU memory."""
+        import gc
+        gc.collect()
+        if hasattr(torch, 'cuda') and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def _extract_text_with_nougat(self, elem, page_num, img_path, elem_type):
         extracted_text = None
-        # Count image sent to Nougat service
         self.nougat_images_count += 1
         
         try:
-            # Try multiple extraction attempts with error handling
             max_attempts = 3
             for attempt in range(max_attempts):
                 try:
-                    # Clear CUDA cache before processing to free memory
-                    if hasattr(torch, 'cuda') and torch.cuda.is_available():
-                        torch.cuda.empty_cache()
+                    self._clear_gpu_memory()
                     
                     # Process with Nougat
                     extracted_text = self.nougat_service.get_text_from_nougat(img_path)
                     if extracted_text:
                         break
-                except (RuntimeError, OutOfMemoryError) as e:
-                    # Check if this is a CUDA out of memory error
+                except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
                     if "CUDA out of memory" in str(e):
                         logger.info(f"CUDA out of memory on attempt {attempt + 1}, clearing cache and retrying...")
-                        
-                        # Force garbage collection
-                        import gc
-                        gc.collect()
-                        
-                        # Clear CUDA cache
-                        if hasattr(torch, 'cuda') and torch.cuda.is_available():
-                            torch.cuda.empty_cache()
+                        self._clear_gpu_memory()
                         
                         if attempt == max_attempts - 1:
                             # Final attempt - try on CPU
                             logger.info(f"Trying final attempt on CPU for {elem.label} on page {page_num}")
                             try:
-                                # Force CPU processing
                                 extracted_text = self.nougat_service.get_text_from_nougat(img_path, device="cpu")
                                 if extracted_text:
                                     break
                             except Exception as cpu_error:
                                 logger.info(f"CPU fallback failed: {str(cpu_error)}")
-                        
                         continue
-                    # Re-raise if not a CUDA memory issue
                     raise
                 except AttributeError as ae:
                     # Handle specific model attribute errors
