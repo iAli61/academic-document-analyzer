@@ -51,8 +51,8 @@ class EnhancedDocumentAnalyzer:
                  confidence_threshold: float = 0.7,
                  min_length: int = 0,
                  overlap_threshold: float = 0.5,
-                 ignor_roles: List[str] = ['pageFooter','footnote'],
-                 top_margin_percent: float = 0.05,  # as a ration of page height
+                 ignore_roles: List[str] = ['pageFooter','footnote'],  # Fixed typo: ignor_roles → ignore_roles
+                 top_margin_percent: float = 0.05,  # as a ratio of page height
                  bottom_margin_percent: float = 0.05,  # as a percentage of page height
                  ocr_elements: List[str] = ['formula', 'table']  # Add 'table' to OCR elements
                  ):
@@ -71,7 +71,7 @@ class EnhancedDocumentAnalyzer:
         self.nougat_service = NougatService()
         
         self.min_length = min_length
-        self.ignor_roles = ignor_roles
+        self.ignore_roles = ignore_roles  # Fixed typo: ignor_roles → ignore_roles
         self.overlap_threshold = overlap_threshold
         self.top_margin_percent = top_margin_percent
         self.bottom_margin_percent = bottom_margin_percent
@@ -292,20 +292,7 @@ class EnhancedDocumentAnalyzer:
             processing_time = end_time - start_time
             
             # Add document info to report with Nougat statistics
-            doc_info = {
-                "document_name": pdf_path.name,
-                "pages": num_pages,
-                "processing_time_seconds": processing_time,
-                "nougat_images": self.nougat_images_count
-            }
-            self.report_data["documents"].append(doc_info)
-            self.report_data["total_documents"] += 1
-            self.report_data["total_pages"] += num_pages
-            self.report_data["total_time_seconds"] += processing_time
-            self.report_data["total_nougat_images"] += self.nougat_images_count
-            
-            # Write the updated report to JSON file
-            self._write_report_json()
+            self._update_report_with_document(pdf_path, num_pages, processing_time)
             
             return markdown_text, df, visualization_paths
             
@@ -318,20 +305,7 @@ class EnhancedDocumentAnalyzer:
             end_time = time.time()
             processing_time = end_time - start_time
             
-            doc_info = {
-                "document_name": pdf_path.name,
-                "pages": 0,  # Unable to determine pages due to error
-                "processing_time_seconds": processing_time,
-                "nougat_images": self.nougat_images_count,
-                "error": str(e)
-            }
-            self.report_data["documents"].append(doc_info)
-            self.report_data["total_documents"] += 1
-            self.report_data["total_time_seconds"] += processing_time
-            self.report_data["total_nougat_images"] += self.nougat_images_count
-            
-            # Write report even if processing failed
-            self._write_report_json()
+            self._update_report_with_document(pdf_path, 0, processing_time, error=e)
             
             raise
 
@@ -374,7 +348,7 @@ class EnhancedDocumentAnalyzer:
                 pdf_name = pdf_path.name,
                 page_info = azure_page_info,
                 page_num = page_num,
-                ignor_roles = self.ignor_roles,
+                ignor_roles = self.ignore_roles,  # Fixed typo: use self.ignore_roles
                 min_length = self.min_length
             )
             logger.info(f"Processed {len(azure_elements)} Azure text elements")
@@ -725,6 +699,27 @@ class EnhancedDocumentAnalyzer:
             
         return pd.DataFrame(records)
     
+    def _update_report_with_document(self, pdf_path, num_pages, processing_time, error=None):
+        """Update report data with information from a processed document."""
+        doc_info = {
+            "document_name": pdf_path.name,
+            "pages": num_pages,
+            "processing_time_seconds": processing_time,
+            "nougat_images": self.nougat_images_count
+        }
+        
+        if error:
+            doc_info["error"] = str(error)
+        
+        self.report_data["documents"].append(doc_info)
+        self.report_data["total_documents"] += 1
+        self.report_data["total_pages"] += num_pages
+        self.report_data["total_time_seconds"] += processing_time
+        self.report_data["total_nougat_images"] += self.nougat_images_count
+        
+        # Write the updated report
+        self._write_report_json()
+
     def _write_report_json(self):
         """Write the processing report to a JSON file."""
         report_path = Path(self.output_dir) / "report.json"
@@ -735,7 +730,18 @@ class EnhancedDocumentAnalyzer:
             
         self.report_data["total_time_formatted"] = self._format_time(self.report_data["total_time_seconds"])
         
-        # Write the report to JSON file
+        # Calculate averages for the report
+        if self.report_data["total_documents"] > 0:
+            self.report_data["avg_pages_per_document"] = self.report_data["total_pages"] / self.report_data["total_documents"]
+            self.report_data["avg_processing_time_per_document"] = self.report_data["total_time_seconds"] / self.report_data["total_documents"]
+            self.report_data["avg_nougat_images_per_document"] = self.report_data["total_nougat_images"] / self.report_data["total_documents"]
+            if self.report_data["total_pages"] > 0:
+                self.report_data["avg_processing_time_per_page"] = self.report_data["total_time_seconds"] / self.report_data["total_pages"]
+        
+        # Add timestamp
+        self.report_data["report_generated"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Write to file
         with open(report_path, 'w') as f:
             json.dump(self.report_data, f, indent=4)
         
