@@ -25,6 +25,19 @@ inputs:
     type: string
     default: pageFooter,footnote
     description: Comma-separated list of roles to ignore
+  top_margin_percent:
+    type: number
+    default: 0.05
+    description: Top margin as a ratio of page height
+  bottom_margin_percent:
+    type: number
+    default: 0.05
+    description: Bottom margin as a ratio of page height
+  ocr_elements:
+    type: string
+    default: formula,table
+    description: Comma-separated list of OCR elements to extract
+  
 
 outputs:
   output_dir:
@@ -43,4 +56,7 @@ command: >-
   --min_length ${{inputs.min_length}} 
   --overlap_threshold ${{inputs.overlap_threshold}} 
   --ignore_roles ${{inputs.ignore_roles}} 
+  --top_margin_percent ${{inputs.top_margin_percent}}
+  --bottom_margin_percent ${{inputs.bottom_margin_percent}}
+  --ocr_elements ${{inputs.ocr_elements}}
   --output_dir ${{outputs.output_dir}}

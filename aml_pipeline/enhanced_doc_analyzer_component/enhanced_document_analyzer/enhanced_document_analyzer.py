@@ -10,6 +10,9 @@ import torch  # Add torch import
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import time  # Add time import for tracking processing time
+import json  # Add json import for writing the report
+import sys  # Add sys import since it's used for stdout handler
 
 from .document_element_type import DocumentElementType
 from .document_element_record import DocumentElementRecord, BoundingBox
@@ -51,7 +54,7 @@ class EnhancedDocumentAnalyzer:
                  ignor_roles: List[str] = ['pageFooter','footnote'],
                  top_margin_percent: float = 0.05,  # as a ration of page height
                  bottom_margin_percent: float = 0.05,  # as a percentage of page height
-                 ocr_elements: List[str] = ['formula']
+                 ocr_elements: List[str] = ['formula', 'table']  # Add 'table' to OCR elements
                  ):
         """Initialize the document analyzer with both Azure and local services."""
         self.output_dir = Path(output_dir)
@@ -74,6 +77,15 @@ class EnhancedDocumentAnalyzer:
         self.bottom_margin_percent = bottom_margin_percent
         self.top_margin = 0
         self.bottom_margin = 0
+        # Initialize counter for Nougat service usage
+        self.nougat_images_count = 0
+        self.report_data = {
+            "documents": [],
+            "total_documents": 0,
+            "total_pages": 0,
+            "total_time_seconds": 0,
+            "total_nougat_images": 0
+        }
 
     def _calculate_overlap(self, smaller_box: Tuple[float, float, float, float], 
                          larger_box: Tuple[float, float, float, float]) -> float:
@@ -184,8 +196,11 @@ class EnhancedDocumentAnalyzer:
         
     def analyze_document(self, pdf_path: str) -> Tuple[str, pd.DataFrame, Dict[int, str]]:
         """Parallelized document analysis using ThreadPoolExecutor."""
+        start_time = time.time()  # Track start time
         pdf_path = Path(pdf_path)
         elements = []
+        # Reset Nougat images counter for this document
+        self.nougat_images_count = 0
         logger.info(f"\nProcessing document: {pdf_path}")
         
         try:
@@ -195,7 +210,8 @@ class EnhancedDocumentAnalyzer:
             # Step 1: Convert PDF pages to images
             logger.info("\nStep 1: PDF to Image Conversion")
             images = self._pdf_to_images(pdf_path)
-            logger.info(f"Converting {len(images)} pages to images")
+            num_pages = len(images)
+            logger.info(f"Converting {num_pages} pages to images")
 
             # Calculate margins
             if images:
@@ -271,12 +287,52 @@ class EnhancedDocumentAnalyzer:
             )
             logger.info(f"Created {len(visualization_paths)} page visualizations")
             
+            # Record document processing information
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            # Add document info to report with Nougat statistics
+            doc_info = {
+                "document_name": pdf_path.name,
+                "pages": num_pages,
+                "processing_time_seconds": processing_time,
+                "nougat_images": self.nougat_images_count
+            }
+            self.report_data["documents"].append(doc_info)
+            self.report_data["total_documents"] += 1
+            self.report_data["total_pages"] += num_pages
+            self.report_data["total_time_seconds"] += processing_time
+            self.report_data["total_nougat_images"] += self.nougat_images_count
+            
+            # Write the updated report to JSON file
+            self._write_report_json()
+            
             return markdown_text, df, visualization_paths
             
         except Exception as e:
             logger.info(f"\nError processing document: {str(e)}")
             import traceback
             traceback.print_exc()
+            
+            # Record failed document in report with Nougat statistics
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            doc_info = {
+                "document_name": pdf_path.name,
+                "pages": 0,  # Unable to determine pages due to error
+                "processing_time_seconds": processing_time,
+                "nougat_images": self.nougat_images_count,
+                "error": str(e)
+            }
+            self.report_data["documents"].append(doc_info)
+            self.report_data["total_documents"] += 1
+            self.report_data["total_time_seconds"] += processing_time
+            self.report_data["total_nougat_images"] += self.nougat_images_count
+            
+            # Write report even if processing failed
+            self._write_report_json()
+            
             raise
 
     def _process_single_page(self, page_num, page_img, bbox_scaler, pdf_path):
@@ -454,6 +510,9 @@ class EnhancedDocumentAnalyzer:
 
     def _extract_text_with_nougat(self, elem, page_num, img_path, elem_type):
         extracted_text = None
+        # Count image sent to Nougat service
+        self.nougat_images_count += 1
+        
         try:
             # Try multiple extraction attempts with error handling
             max_attempts = 3
@@ -673,4 +732,32 @@ class EnhancedDocumentAnalyzer:
             records.append(record)
             
         return pd.DataFrame(records)
+    
+    def _write_report_json(self):
+        """Write the processing report to a JSON file."""
+        report_path = Path(self.output_dir) / "report.json"
+        
+        # Format the processing times to be more readable
+        for doc in self.report_data["documents"]:
+            doc["processing_time_formatted"] = self._format_time(doc["processing_time_seconds"])
+            
+        self.report_data["total_time_formatted"] = self._format_time(self.report_data["total_time_seconds"])
+        
+        # Write the report to JSON file
+        with open(report_path, 'w') as f:
+            json.dump(self.report_data, f, indent=4)
+        
+        logger.info(f"Report saved to {report_path}")
+    
+    def _format_time(self, seconds):
+        """Format time in seconds to a human-readable string."""
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        
+        if hours > 0:
+            return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+        elif minutes > 0:
+            return f"{int(minutes)}m {seconds:.2f}s"
+        else:
+            return f"{seconds:.2f}s"
 

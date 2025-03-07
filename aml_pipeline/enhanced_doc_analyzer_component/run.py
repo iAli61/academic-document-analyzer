@@ -24,6 +24,9 @@ def parse_args():
     parser.add_argument("--min_length", type=int, default=10)
     parser.add_argument("--overlap_threshold", type=float, default=0.5)
     parser.add_argument("--ignore_roles", type=str, default="pageFooter,footnote")
+    parser.add_argument("--top_margin_percent", type=float, default=0.05)
+    parser.add_argument("--bottom_margin_percent", type=float, default=0.05)
+    parser.add_argument("--ocr_elements", type=str, default="formula,table")
     
     # Output arguments
     parser.add_argument("--output_dir", type=str, required=True)
@@ -136,7 +139,10 @@ def main(args, logger):
                 confidence_threshold=args.confidence_threshold,
                 min_length=args.min_length,
                 overlap_threshold=args.overlap_threshold,
-                ignor_roles=args.ignore_roles.split(",")
+                ignor_roles=args.ignore_roles.split(","),
+                top_margin_percent=args.top_margin_percent,
+                bottom_margin_percent=args.bottom_margin_percent,
+                ocr_elements=args.ocr_elements.split(",")
             )
             logger.info(f"Processing {pdf_file.name}")
             try:
