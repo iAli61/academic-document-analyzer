@@ -110,10 +110,8 @@ def main(args, logger):
         logger: Logger instance
     """
     try:
-
         # Set up Document Intelligence credentials
         endpoint, api_key = setup_document_intelligence(args.doc_intel_connection_id)
-        
         
         # Get list of PDF files
         input_folder = Path(args.input_folder)
@@ -127,8 +125,16 @@ def main(args, logger):
         
         # Process each PDF and collect DataFrames
         all_dfs = []
+        # Initialize combined report data
+        combined_report = {
+            "documents": [],
+            "total_documents": 0,
+            "total_pages": 0,
+            "total_time_seconds": 0,
+            "total_nougat_images": 0
+        }
+        
         for pdf_file in pdf_files:
-
             output_dir = Path(args.output_dir) / pdf_file.stem
             output_dir.mkdir(parents=True, exist_ok=True)
             # Initialize analyzer
@@ -149,6 +155,14 @@ def main(args, logger):
                 pdf = process_single_pdf(pdf_file, analyzer, logger)
                 if not pdf.empty:
                     all_dfs.append(pdf)
+                
+                # Collect report data from this analyzer
+                combined_report["documents"].extend(analyzer.report_data["documents"])
+                combined_report["total_documents"] += analyzer.report_data["total_documents"]
+                combined_report["total_pages"] += analyzer.report_data["total_pages"]
+                combined_report["total_time_seconds"] += analyzer.report_data["total_time_seconds"]
+                combined_report["total_nougat_images"] += analyzer.report_data["total_nougat_images"]
+                
             except Exception as e:
                 logger.error(f"Error processing {pdf_file.name}: {str(e)}")
                 logger.error(traceback.format_exc())
@@ -157,15 +171,58 @@ def main(args, logger):
         if all_dfs:
             combined_df = pd.concat(all_dfs, ignore_index=True)
             combined_df.to_csv(f"{args.output_dir}/combined_elements_data.csv", index=False)
-            logger.info(f"Combined data saved to {args.output_dir}.combined_elements_data.csv")
+            logger.info(f"Combined data saved to {args.output_dir}/combined_elements_data.csv")
             logger.info(f"Total elements across all PDFs: {len(combined_df)}")
         else:
             logger.warning("No data was successfully processed")
+        
+        # Format the combined report
+        if combined_report["total_documents"] > 0:
+            # Format time and add aggregate metrics
+            for doc in combined_report["documents"]:
+                if "processing_time_seconds" in doc:
+                    doc["processing_time_formatted"] = _format_time(doc["processing_time_seconds"])
+            
+            combined_report["total_time_formatted"] = _format_time(combined_report["total_time_seconds"])
+            
+            # Calculate averages
+            combined_report["avg_pages_per_document"] = combined_report["total_pages"] / combined_report["total_documents"]
+            combined_report["avg_processing_time_per_document"] = combined_report["total_time_seconds"] / combined_report["total_documents"]
+            combined_report["avg_nougat_images_per_document"] = combined_report["total_nougat_images"] / combined_report["total_documents"]
+            if combined_report["total_pages"] > 0:
+                combined_report["avg_processing_time_per_page"] = combined_report["total_time_seconds"] / combined_report["total_pages"]
+            
+            # Add timestamp
+            combined_report["report_generated"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Write combined report
+            combined_report_path = Path(args.output_dir) / "combined_report.json"
+            with open(combined_report_path, 'w') as f:
+                json.dump(combined_report, f, indent=4)
+            
+            logger.info(f"Combined report saved to {combined_report_path}")
+            logger.info(f"Total documents processed: {combined_report['total_documents']}")
+            logger.info(f"Total pages processed: {combined_report['total_pages']}")
+            logger.info(f"Total Nougat images: {combined_report['total_nougat_images']}")
+            logger.info(f"Total processing time: {combined_report['total_time_formatted']}")
         
     except Exception as e:
         logger.error(f"Error in main processing: {str(e)}")
         logger.error(traceback.format_exc())
         raise
+
+# Add this helper function to format time consistently
+def _format_time(seconds):
+    """Format time in seconds to a human-readable string."""
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    
+    if hours > 0:
+        return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+    elif minutes > 0:
+        return f"{int(minutes)}m {seconds:.2f}s"
+    else:
+        return f"{seconds:.2f}s"
 
 def main_wrapper(args):
     """
