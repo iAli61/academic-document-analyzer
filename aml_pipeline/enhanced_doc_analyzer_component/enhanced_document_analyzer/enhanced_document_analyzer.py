@@ -33,7 +33,7 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.INFO)
 
 # Define a simple log format
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s')
 handler.setFormatter(formatter)
 
 # Avoid adding multiple handlers if the logger already has handlers
@@ -51,10 +51,10 @@ class EnhancedDocumentAnalyzer:
                  confidence_threshold: float = 0.7,
                  min_length: int = 0,
                  overlap_threshold: float = 0.5,
-                 ignore_roles: List[str] = ['pageFooter','footnote'],  # Fixed typo: ignor_roles → ignore_roles
-                 top_margin_percent: float = 0.05,  # as a ratio of page height
-                 bottom_margin_percent: float = 0.05,  # as a percentage of page height
-                 ocr_elements: List[str] = ['formula', 'table']  # Add 'table' to OCR elements
+                 ignore_roles: List[str] = ['pageFooter','footnote'],
+                 top_margin_percent: float = 0.05,
+                 bottom_margin_percent: float = 0.05,
+                 ocr_elements: List[str] = ['formula', 'table']
                  ):
         """Initialize the document analyzer with both Azure and local services."""
         self.output_dir = Path(output_dir)
@@ -71,20 +71,24 @@ class EnhancedDocumentAnalyzer:
         self.nougat_service = NougatService()
         
         self.min_length = min_length
-        self.ignore_roles = ignore_roles  # Fixed typo: ignor_roles → ignore_roles
+        self.ignore_roles = ignore_roles
         self.overlap_threshold = overlap_threshold
         self.top_margin_percent = top_margin_percent
         self.bottom_margin_percent = bottom_margin_percent
         self.top_margin = 0
         self.bottom_margin = 0
-        # Initialize counter for Nougat service usage
+        # Initialize counters for document processing statistics
         self.nougat_images_count = 0
+        self.images_count = 0
+        self.tables_count = 0
         self.report_data = {
             "documents": [],
             "total_documents": 0,
             "total_pages": 0,
             "total_time_seconds": 0,
-            "total_nougat_images": 0
+            "total_nougat_images": 0,
+            "total_images": 0,
+            "total_tables": 0
         }
 
     def _calculate_overlap(self, smaller_box: Tuple[float, float, float, float], 
@@ -199,8 +203,10 @@ class EnhancedDocumentAnalyzer:
         start_time = time.time()  # Track start time
         pdf_path = Path(pdf_path)
         elements = []
-        # Reset Nougat images counter for this document
+        # Reset counters for this document
         self.nougat_images_count = 0
+        self.images_count = 0
+        self.tables_count = 0
         logger.info(f"\nProcessing document: {pdf_path}")
         
         try:
@@ -348,7 +354,7 @@ class EnhancedDocumentAnalyzer:
                 pdf_name = pdf_path.name,
                 page_info = azure_page_info,
                 page_num = page_num,
-                ignor_roles = self.ignore_roles,  # Fixed typo: use self.ignore_roles
+                ignore_roles = self.ignore_roles,  # Fixed typo: use self.ignore_roles
                 min_length = self.min_length
             )
             logger.info(f"Processed {len(azure_elements)} Azure text elements")
@@ -438,8 +444,10 @@ class EnhancedDocumentAnalyzer:
             extraction_method = 'default'
             if elem.label.lower() in ['figure', 'image', 'graphic', 'photo', 'diagram', 'picture']:
                 elem_type = DocumentElementType.IMAGE
+                self.images_count += 1  # Increment images counter
             elif elem.label.lower() == 'table':
                 elem_type = DocumentElementType.TABLE
+                self.tables_count += 1  # Increment tables counter
                 extraction_method = 'nougat'
             elif elem.label.lower() == 'formula':
                 elem_type = DocumentElementType.FORMULA
@@ -705,7 +713,9 @@ class EnhancedDocumentAnalyzer:
             "document_name": pdf_path.name,
             "pages": num_pages,
             "processing_time_seconds": processing_time,
-            "nougat_images": self.nougat_images_count
+            "nougat_images": self.nougat_images_count,
+            "images": self.images_count,  # Add images count
+            "tables": self.tables_count   # Add tables count
         }
         
         if error:
@@ -716,6 +726,8 @@ class EnhancedDocumentAnalyzer:
         self.report_data["total_pages"] += num_pages
         self.report_data["total_time_seconds"] += processing_time
         self.report_data["total_nougat_images"] += self.nougat_images_count
+        self.report_data["total_images"] += self.images_count  # Add to totals
+        self.report_data["total_tables"] += self.tables_count  # Add to totals
         
         # Write the updated report
         self._write_report_json()

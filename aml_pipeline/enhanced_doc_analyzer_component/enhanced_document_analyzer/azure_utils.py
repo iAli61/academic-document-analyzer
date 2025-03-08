@@ -61,7 +61,7 @@ def analyze_page_with_azure(azure_client: DocumentAnalysisClient, pdf_path: str,
             }]
         }
 
-def process_azure_paragraphs(paragraphs: List[Dict], pdf_name: str, page_info: Dict, page_num: int, ignor_roles: List[str], min_length: int) -> List[DocumentElementRecord]:
+def process_azure_paragraphs(paragraphs: List[Dict], pdf_name: str, page_info: Dict, page_num: int, ignore_roles: List[str], min_length: int) -> List[DocumentElementRecord]:
     """Process text paragraphs from Azure Document Intelligence."""
     elements = []
     
@@ -73,7 +73,7 @@ def process_azure_paragraphs(paragraphs: List[Dict], pdf_name: str, page_info: D
     print(f"Processing {len(paragraphs)} paragraphs from page {page_num}")
     # Add order_id to track original Azure ordering
     for order_id, para in enumerate(paragraphs):
-        if para['role'] in ignor_roles:
+        if para['role'] in ignore_roles:
             # print(f"Skipping ignored role: {para['role']}")
             continue
         if len(para['content']) < min_length:

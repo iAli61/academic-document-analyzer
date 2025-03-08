@@ -3,6 +3,8 @@ from pathlib import Path
 import pandas as pd
 import os
 import traceback
+import time  # Add missing time import
+import json  # Add missing json import
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from enhanced_document_analyzer import EnhancedDocumentAnalyzer
@@ -131,7 +133,9 @@ def main(args, logger):
             "total_documents": 0,
             "total_pages": 0,
             "total_time_seconds": 0,
-            "total_nougat_images": 0
+            "total_nougat_images": 0,
+            "total_images": 0,     # Add field for images
+            "total_tables": 0      # Add field for tables
         }
         
         for pdf_file in pdf_files:
@@ -145,7 +149,7 @@ def main(args, logger):
                 confidence_threshold=args.confidence_threshold,
                 min_length=args.min_length,
                 overlap_threshold=args.overlap_threshold,
-                ignor_roles=args.ignore_roles.split(","),
+                ignore_roles=args.ignore_roles.split(","),
                 top_margin_percent=args.top_margin_percent,
                 bottom_margin_percent=args.bottom_margin_percent,
                 ocr_elements=args.ocr_elements.split(",")
@@ -162,6 +166,8 @@ def main(args, logger):
                 combined_report["total_pages"] += analyzer.report_data["total_pages"]
                 combined_report["total_time_seconds"] += analyzer.report_data["total_time_seconds"]
                 combined_report["total_nougat_images"] += analyzer.report_data["total_nougat_images"]
+                combined_report["total_images"] += analyzer.report_data["total_images"]  # Add images
+                combined_report["total_tables"] += analyzer.report_data["total_tables"]  # Add tables
                 
             except Exception as e:
                 logger.error(f"Error processing {pdf_file.name}: {str(e)}")
@@ -189,6 +195,8 @@ def main(args, logger):
             combined_report["avg_pages_per_document"] = combined_report["total_pages"] / combined_report["total_documents"]
             combined_report["avg_processing_time_per_document"] = combined_report["total_time_seconds"] / combined_report["total_documents"]
             combined_report["avg_nougat_images_per_document"] = combined_report["total_nougat_images"] / combined_report["total_documents"]
+            combined_report["avg_images_per_document"] = combined_report["total_images"] / combined_report["total_documents"]  # Add average images
+            combined_report["avg_tables_per_document"] = combined_report["total_tables"] / combined_report["total_documents"]  # Add average tables
             if combined_report["total_pages"] > 0:
                 combined_report["avg_processing_time_per_page"] = combined_report["total_time_seconds"] / combined_report["total_pages"]
             
@@ -204,6 +212,8 @@ def main(args, logger):
             logger.info(f"Total documents processed: {combined_report['total_documents']}")
             logger.info(f"Total pages processed: {combined_report['total_pages']}")
             logger.info(f"Total Nougat images: {combined_report['total_nougat_images']}")
+            logger.info(f"Total images: {combined_report['total_images']}")  # Log images count
+            logger.info(f"Total tables: {combined_report['total_tables']}")  # Log tables count
             logger.info(f"Total processing time: {combined_report['total_time_formatted']}")
         
     except Exception as e:

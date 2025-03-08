@@ -67,7 +67,7 @@ analyzer = EnhancedDocumentAnalyzer(
     confidence_threshold=0.8,  # Higher confidence threshold for element detection
     min_length=20,            # Minimum text length to consider
     overlap_threshold=0.6,    # Higher threshold for overlap detection
-    ignor_roles=['pageFooter', 'footnote', 'pageHeader']  # Custom roles to ignore
+    ignore_roles=['pageFooter', 'footnote', 'pageHeader']  # Custom roles to ignore
 )
 ```
 
