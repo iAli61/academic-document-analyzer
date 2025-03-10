@@ -20,3 +20,4 @@ nb/faiss_mlindex_with_langchain-1.ipynb
 aml_workspace/config/dev.local.json
 nb/output_dir
 nb/temp
+nb/Profile_pipeline/combined_report.json
